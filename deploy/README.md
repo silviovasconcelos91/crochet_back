@@ -13,14 +13,16 @@ Caddy, qui obtient et renouvelle le certificat HTTPS.
 3. `sudo mkdir -p /opt/crochet-back && sudo chown <utilisateur> /opt/crochet-back`
 4. Créer `/opt/crochet-back/.env` (jamais versionné) :
 
-       DB_URL=jdbc:postgresql://host.docker.internal:5432/crochet
-       DB_USERNAME=crochet
-       DB_PASSWORD=...
+       PGHOST=host.docker.internal
+       PGPORT=5432
+       PGDATABASE=crochet
+       PGUSER=crochet
+       PGPASSWORD=...
        DOMAIN=api.mondomaine.fr
        CROCHET_CORS_ALLOWEDORIGINS=https://app.mondomaine.fr
 
    Compose interprète les `$` du fichier : un mot de passe qui en contient s'écrit entre apostrophes
-   (`DB_PASSWORD='mot$de$passe'`). Le front doit être sur le même site que l'API (même domaine
+   (`PGPASSWORD='mot$de$passe'`). Le front doit être sur le même site que l'API (même domaine
    parent) : le cookie de session est `SameSite=Lax`.
 
    **Postgres installé sur le VPS lui-même** : `host.docker.internal` désigne l'hôte vu depuis le
@@ -72,7 +74,7 @@ déploiements), pour que le retour arrière reste possible.
 comptes, les patterns et les sessions de façon irréversible, puis ajoute un pseudo obligatoire ; V9 change
 la clé de l'avancement. Il ne faut donc pas revenir à une image antérieure à cette version. Avant de la
 déployer, faire une sauvegarde de la base. Elle n'est pas dans `compose.yaml` : Postgres tourne sur le VPS
-(voir `DB_URL`), donc :
+(voir `PGHOST`), donc :
 
     pg_dump -h localhost -U crochet -Fc crochet > crochet-avant-v7.dump
 

@@ -65,9 +65,11 @@ jobs:
         run: ./mvnw -B -Pnative -DskipTests native:compile
       - name: Smoke-test the native binary
         env:
-          DB_URL: jdbc:postgresql://localhost:5432/crochet
-          DB_USERNAME: crochet
-          DB_PASSWORD: crochet
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGDATABASE: crochet
+          PGUSER: crochet
+          PGPASSWORD: crochet
           SESSION_COOKIE_SECURE: 'false'
         run: |
           ./target/crochet_back > native.log 2>&1 &

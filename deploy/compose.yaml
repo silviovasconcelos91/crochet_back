@@ -4,7 +4,7 @@ services:
     image: ${DOCKERHUB_IMAGE:?set in release.env}:${IMAGE_TAG:?set in release.env}
     restart: unless-stopped
     env_file: .env
-    # lets DB_URL reach a Postgres running on the VPS itself as host.docker.internal
+    # lets PGHOST reach a Postgres running on the VPS itself as host.docker.internal
     extra_hosts:
       - host.docker.internal:host-gateway
     # no published port: only Caddy reaches the app, so forwarded headers cannot be spoofed
