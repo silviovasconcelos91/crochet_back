@@ -18,13 +18,13 @@ class UsernamesTest {
 
     @Test
     void normalizeStripsAndComposesAccents() {
-        assertThat(Usernames.normalize("  Amélie ")).isEqualTo("Amélie");
+        assertThat(Usernames.normalize("  Ame\u0301lie ")).isEqualTo("Amélie");
         assertThat(Usernames.normalize(null)).isNull();
     }
 
     @Test
     void keyIgnoresCaseAndAccentEncoding() {
-        assertThat(Usernames.key("AméLIE")).isEqualTo(Usernames.key(" amélie"));
+        assertThat(Usernames.key("Ame\u0301LIE")).isEqualTo(Usernames.key(" amélie"));
         assertThat(Usernames.key("Amélie")).isEqualTo("amélie");
         assertThat(Usernames.key(null)).isNull();
     }

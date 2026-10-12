@@ -149,7 +149,7 @@ class AuthApiTests {
 
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("Amélie", PASSWORD)))
+                        .content(credentials("Ame\u0301lie", PASSWORD)))
                 .andExpect(status().isOk());
     }
 

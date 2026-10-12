@@ -197,4 +197,20 @@ class LoginRateLimitApiTests {
 
         send("/api/auth/login", ip, "Casse", PASSWORD).andExpect(status().isTooManyRequests());
     }
+
+    @Test
+    void accountEndpointsShareTheLoginThrottleKey() throws Exception {
+        String ip = "203.0.113.81";
+        Browser owner = new Browser(mvc).fetchCsrf();
+        owner.perform(from(ip, post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration("partage", PASSWORD))))
+                .andExpect(status().isCreated());
+        send("/api/auth/login", ip, "partage", "mauvais-1").andExpect(status().isUnauthorized());
+        send("/api/auth/login", ip, "partage", "mauvais-2").andExpect(status().isUnauthorized());
+
+        owner.perform(from(ip, put("/api/me/password").contentType(APPLICATION_JSON)
+                        .content("{ \"currentPassword\": \"%s\", \"newPassword\": \"nouveau-secret\" }"
+                                .formatted(PASSWORD))))
+                .andExpect(status().isTooManyRequests());
+    }
 }
