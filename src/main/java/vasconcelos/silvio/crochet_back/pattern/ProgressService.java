@@ -9,6 +9,7 @@ import vasconcelos.silvio.crochet_back.pattern.dto.ProgressRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.ProgressResponse;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,8 +32,7 @@ public class ProgressService {
         if (rowIndex >= rowCount) {
             throw new InvalidFieldException("rowIndex", "must be less than " + rowCount);
         }
-        progress.insertIfMissing(patternId, accountId, Timestamps.now());
-        PatternProgress row = progress.findForUpdate(patternId, accountId).orElseThrow();
+        PatternProgress row = lockOrStart(patternId, accountId);
         row.update(request.status(), stepIndex, rowIndex);
         progress.flush();
         return mapper.toProgressResponse(row);
@@ -43,5 +43,21 @@ public class ProgressService {
         if (progress.deleteByKey(patternId, accountId) == 0) {
             throw new ProgressNotFoundException(patternId);
         }
+    }
+
+    /**
+     * Starts the progress if missing, then locks it. The same account's abandon can delete the row
+     * between the two statements (both only hold a shared lock on the pattern), so retry a few times.
+     */
+    private PatternProgress lockOrStart(long patternId, long accountId) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            progress.insertIfMissing(patternId, accountId, Timestamps.now());
+            Optional<PatternProgress> row = progress.findForUpdate(patternId, accountId);
+            if (row.isPresent()) {
+                return row.get();
+            }
+        }
+        throw new IllegalStateException("Progress of pattern " + patternId + " for account " + accountId
+                + " keeps disappearing while it is being updated");
     }
 }

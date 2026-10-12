@@ -198,6 +198,40 @@ class ProgressApiTests {
     }
 
     @Test
+    void concurrentUpdatesAndAbandonsOfOneAccountNeverFail() throws Exception {
+        int rounds = 10;
+        for (int round = 0; round < rounds; round++) {
+            String target = create(mvc, CHAT) + "/progress";
+            mvc.perform(put(target).contentType(APPLICATION_JSON).content(progress("IN_PROGRESS", 0, 0)))
+                    .andExpect(status().isOk());
+            CountDownLatch start = new CountDownLatch(1);
+            try (ExecutorService pool = Executors.newFixedThreadPool(6)) {
+                List<Future<Integer>> puts = new ArrayList<>();
+                List<Future<Integer>> deletes = new ArrayList<>();
+                for (int client = 0; client < 3; client++) {
+                    puts.add(pool.submit(() -> {
+                        start.await();
+                        return mvc.perform(put(target).contentType(APPLICATION_JSON)
+                                        .content(progress("IN_PROGRESS", 0, 1)))
+                                .andReturn().getResponse().getStatus();
+                    }));
+                    deletes.add(pool.submit(() -> {
+                        start.await();
+                        return mvc.perform(delete(target)).andReturn().getResponse().getStatus();
+                    }));
+                }
+                start.countDown();
+                for (Future<Integer> status : puts) {
+                    assertThat(status.get()).isEqualTo(200);
+                }
+                for (Future<Integer> status : deletes) {
+                    assertThat(status.get()).isIn(204, 404);
+                }
+            }
+        }
+    }
+
+    @Test
     void unknownPatternIsNotFound() throws Exception {
         mvc.perform(put("/api/patterns/999/progress").contentType(APPLICATION_JSON)
                         .content(progress("IN_PROGRESS", 0, 0)))

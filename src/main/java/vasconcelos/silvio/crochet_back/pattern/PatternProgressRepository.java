@@ -36,7 +36,14 @@ public interface PatternProgressRepository extends JpaRepository<PatternProgress
     @Query("delete from PatternProgress pr where pr.patternId = :patternId and pr.accountId = :accountId")
     int deleteByKey(@Param("patternId") long patternId, @Param("accountId") long accountId);
 
-    List<PatternProgress> findAllByPatternId(Long patternId);
+    /**
+     * Every account's progress on the pattern, locked. Used by the pattern replace: account deletion
+     * cascades to progress without taking the pattern lock, so unlocked rows could vanish under the
+     * clamp update (stale state) once other accounts can follow a pattern.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select pr from PatternProgress pr where pr.patternId = :patternId")
+    List<PatternProgress> findAllByPatternIdForUpdate(@Param("patternId") long patternId);
 
     @Modifying
     @Query("delete from PatternProgress pr where pr.patternId = :patternId and pr.accountId <> :keptAccountId")

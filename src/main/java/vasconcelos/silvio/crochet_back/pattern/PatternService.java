@@ -46,7 +46,7 @@ public class PatternService {
         mapper.toSteps(request.steps()).forEach(pattern::addStep);
         pattern.touch();
         repository.flush();
-        progress.findAllByPatternId(id).forEach(row -> row.clampTo(pattern.getSteps()));
+        progress.findAllByPatternIdForUpdate(id).forEach(row -> row.clampTo(pattern.getSteps()));
         progress.flush();
         return mapper.toResponse(pattern, progress.findById(new PatternProgress.Key(id, accountId)).orElse(null));
     }
