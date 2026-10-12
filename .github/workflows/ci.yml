@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+# one run per ref at a time: on master, runs queue so deploys keep the push order;
+# on a PR, a new push cancels the previous run
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run the test suite
+        run: ./mvnw -B verify
+
+  native:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-24.04
+    environment: production
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: crochet
+          POSTGRES_USER: crochet
+          POSTGRES_PASSWORD: crochet
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crochet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: graalvm-community
+          cache: maven
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile the native binary
+        run: ./mvnw -B -Pnative -DskipTests native:compile
+      - name: Smoke-test the native binary
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/crochet
+          DB_USERNAME: crochet
+          DB_PASSWORD: crochet
+          SESSION_COOKIE_SECURE: 'false'
+        run: |
+          ./target/crochet_back > native.log 2>&1 &
+          bash ci/smoke-test.sh http://localhost:8080
+      - name: Show the native binary log
+        if: failure()
+        run: cat native.log
+      - name: Compute the image tag
+        id: tag
+        run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/crochet-back:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/crochet-back:${{ steps.tag.outputs.sha }}
+
+  deploy:
+    needs: native
+    runs-on: ubuntu-24.04
+    environment: production
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      TARGET: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH with the pinned host key
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host *\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+      - name: Write the release file
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          printf 'DOCKERHUB_IMAGE=%s/crochet-back\nIMAGE_TAG=sha-%s\n' \
+            "$DOCKERHUB_USERNAME" "${GITHUB_SHA::7}" > deploy/release.env
+      - name: Copy the stack to the VPS
+        run: |
+          scp deploy/compose.yaml deploy/Caddyfile deploy/deploy.sh deploy/release.env \
+            "$TARGET:/opt/crochet-back/"
+      - name: Restart the stack
+        run: ssh "$TARGET" 'sh /opt/crochet-back/deploy.sh'
+      - name: Check the deployed API over HTTPS
+        env:
+          DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+        run: |
+          for _ in $(seq 30); do
+            status="$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/api/auth/csrf" || true)"
+            if [ "$status" = 204 ]; then
+              echo "API answers on https://$DOMAIN"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not answer 204 on https://$DOMAIN (last status: $status)" >&2
+          exit 1

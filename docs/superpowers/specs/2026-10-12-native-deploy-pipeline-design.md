@@ -49,7 +49,7 @@ Un seul workflow, trois jobs enchaînés.
 | Job | Déclencheur | Rôle |
 |---|---|---|
 | `test` | PR vers `master`, push sur `master` | Temurin 21 + cache Maven, `./mvnw -B verify` (suite complète, Testcontainers) |
-| `native` | push sur `master`, après `test` | GraalVM 21 (`graalvm/setup-graalvm`) + cache Maven, `./mvnw -B -Pnative -DskipTests native:compile`, smoke test du binaire, `docker build`, push Docker Hub |
+| `native` | push sur `master`, après `test` | GraalVM 25 (`graalvm/setup-graalvm`, bytecode Java 21) + cache Maven, `./mvnw -B -Pnative -DskipTests native:compile`, smoke test du binaire, `docker build`, push Docker Hub |
 | `deploy` | après `native`, environnement GitHub `production` | copie `deploy/` sur le VPS (SCP), écrit `release.env`, lance `deploy.sh` en SSH, vérifie `https://<domaine>/api/auth/csrf` → 204 |
 
 - **Smoke test natif** (`ci/smoke-test.sh`, curl) : Postgres 17 en conteneur de service, binaire
@@ -113,7 +113,7 @@ unique sur le VPS suffit.
 
 ### Avant le premier push (pas de remote)
 
-- Build natif Linux amd64 dans `ghcr.io/graalvm/native-image-community:21` (sous Windows,
+- Build natif Linux amd64 dans `ghcr.io/graalvm/native-image-community:25` (sous Windows,
   `native-image` produirait un `.exe` inutilisable dans l'image).
 - Smoke test sur ce binaire contre le Postgres local (port 55432) ; hints manquants corrigés.
 - `ci/smoke-test.sh` validé aussi contre l'app JVM.

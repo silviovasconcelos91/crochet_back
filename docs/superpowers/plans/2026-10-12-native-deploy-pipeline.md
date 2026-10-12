@@ -6,7 +6,7 @@
 
 **Architecture:** One workflow with three jobs (`test` → `native` → `deploy`). The native binary is compiled on the runner with `graalvm/setup-graalvm`, smoke-tested against a Postgres service container with a curl script, then copied into a distroless image. The deploy job copies a versioned `deploy/` folder (compose, Caddyfile, script) to the VPS over SSH with a pinned host key and restarts the stack on the exact `sha-<commit>` tag.
 
-**Tech Stack:** GitHub Actions, GraalVM CE 21 (native-maven-plugin, Spring Boot AOT), Docker / Docker Hub, distroless `base-debian12`, Docker Compose, Caddy 2, Bash + curl.
+**Tech Stack:** GitHub Actions, GraalVM CE 25 (bytecode Java 21) (native-maven-plugin, Spring Boot AOT), Docker / Docker Hub, distroless `base-debian12`, Docker Compose, Caddy 2, Bash + curl.
 
 **Spec:** `docs/superpowers/specs/2026-10-12-native-deploy-pipeline-design.md`
 
@@ -21,7 +21,7 @@
 - SSH: plain `ssh`/`scp` with the key and `known_hosts` from secrets and `StrictHostKeyChecking=yes`; no third-party SSH action receives secrets.
 - Shell scripts are LF (`.gitattributes`) and are invoked as `bash script.sh` / `sh script.sh`, never relying on the executable bit.
 - The repo has no remote: nothing is pushed. Docker is required locally; the host port 5432 is taken by a native Postgres, so local runs use a Postgres container on **55432**.
-- Run Maven from the repo root with `./mvnw` (Git Bash). On Windows, `native-image` is only run inside the `ghcr.io/graalvm/native-image-community:21` container.
+- Run Maven from the repo root with `./mvnw` (Git Bash). On Windows, `native-image` is only run inside the `ghcr.io/graalvm/native-image-community:25` container.
 
 ## Review Focus
 
@@ -290,7 +290,7 @@ Run (Git Bash; `MSYS_NO_PATHCONV` keeps the container paths intact):
 
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm --entrypoint bash -v "$(pwd -W)":/app -v "$HOME/.m2":/root/.m2 \
-  -w /app ghcr.io/graalvm/native-image-community:21 -c './mvnw -B -Pnative -DskipTests native:compile'
+  -w /app ghcr.io/graalvm/native-image-community:25 -c './mvnw -B -Pnative -DskipTests native:compile'
 ```
 
 Expected: `BUILD SUCCESS` and a Linux ELF `target/crochet_back` (`file target/crochet_back` → `ELF 64-bit LSB executable, x86-64`). This takes several minutes. If native-image is killed (exit 137), raise the Docker Desktop memory limit to 8 GB and retry.
@@ -570,7 +570,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: graalvm-community
           cache: maven
           github-token: ${{ secrets.GITHUB_TOKEN }}
