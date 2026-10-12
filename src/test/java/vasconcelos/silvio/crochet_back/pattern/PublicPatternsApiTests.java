@@ -186,4 +186,46 @@ class PublicPatternsApiTests {
         assertThat(progressRows()).isZero();
         alice.perform(get(location)).andExpect(status().isOk());
     }
+
+    @Test
+    void goingPrivateDropsFollowersButKeepsTheOwner() throws Exception {
+        String location = create(alice, pattern("Chat", "PUBLIC"));
+        alice.perform(put(location + "/progress").contentType(APPLICATION_JSON).content(progress(0, 0)))
+                .andExpect(status().isOk());
+        bob.perform(put(location + "/progress").contentType(APPLICATION_JSON).content(progress(0, 0)))
+                .andExpect(status().isOk());
+
+        alice.perform(put(location).contentType(APPLICATION_JSON).content(pattern("Chat", "PRIVATE")))
+                .andExpect(status().isOk());
+
+        assertThat(progressRows()).isEqualTo(1);
+        alice.perform(get(location)).andExpect(jsonPath("$.progress.status").value("IN_PROGRESS"));
+        bob.perform(get(location)).andExpect(status().isNotFound());
+        bob.perform(put(location + "/progress").contentType(APPLICATION_JSON).content(progress(0, 0)))
+                .andExpect(status().isNotFound());
+
+        alice.perform(put(location).contentType(APPLICATION_JSON).content(pattern("Chat", "PUBLIC")))
+                .andExpect(status().isOk());
+        bob.perform(get(location)).andExpect(jsonPath("$.progress").doesNotExist());
+    }
+
+    @Test
+    void publicReplaceClampsEveryAccountsProgress() throws Exception {
+        String location = create(alice, withSteps("\"title\": \"Chat\", \"visibility\": \"PUBLIC\",", """
+                [ { "title": "A", "rows": [ { "number": "1", "value": "6ms" }, { "number": "2", "value": "6aug" } ] },
+                  { "title": "B", "rows": [ { "number": "1", "value": "12ms" } ] } ]"""));
+        alice.perform(put(location + "/progress").contentType(APPLICATION_JSON).content(progress(1, 0)))
+                .andExpect(status().isOk());
+        bob.perform(put(location + "/progress").contentType(APPLICATION_JSON).content(progress(0, 1)))
+                .andExpect(status().isOk());
+
+        alice.perform(put(location).contentType(APPLICATION_JSON).content(pattern("Chat", "PUBLIC")))
+                .andExpect(status().isOk()); // VALID_STEPS: one step, one row
+
+        assertThat(progressRows()).isEqualTo(2);
+        alice.perform(get(location))
+                .andExpect(jsonPath("$.progress.stepIndex").value(0)).andExpect(jsonPath("$.progress.rowIndex").value(0));
+        bob.perform(get(location))
+                .andExpect(jsonPath("$.progress.stepIndex").value(0)).andExpect(jsonPath("$.progress.rowIndex").value(0));
+    }
 }

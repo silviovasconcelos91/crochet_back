@@ -47,6 +47,7 @@ public class PatternService {
     public PatternResponse replace(long accountId, long id, PatternRequest request) {
         // locked: every account's progress is clamped against the new steps and must not move meanwhile
         Pattern pattern = findForWrite(accountId, id);
+        boolean wasPublic = pattern.getVisibility() == Visibility.PUBLIC;
         mapper.applyFields(request, pattern);
         // Hibernate flushes inserts before orphan deletes; removing old steps first avoids
         // violating UNIQUE(pattern_id, position) when new steps reuse the same positions.
@@ -55,6 +56,10 @@ public class PatternService {
         mapper.toSteps(request.steps()).forEach(pattern::addStep);
         pattern.touch();
         repository.flush();
+        if (wasPublic && pattern.getVisibility() == Visibility.PRIVATE) {
+            // private means the owner's alone: the followers lose their access and their progress
+            progress.deleteOthers(id, accountId);
+        }
         progress.findAllByPatternIdForUpdate(id).forEach(row -> row.clampTo(pattern.getSteps()));
         progress.flush();
         return respond(pattern, accountId);
