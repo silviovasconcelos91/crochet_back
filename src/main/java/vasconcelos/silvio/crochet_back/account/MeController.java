@@ -37,8 +37,8 @@ public class MeController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody ChangePasswordRequest body,
             HttpServletRequest request) {
-        accountService.changePassword(principal.id(), body.currentPassword(), body.newPassword());
-        accountSessions.invalidateAllExcept(principal.getUsername(), request.getSession().getId());
+        accountService.changePassword(
+                principal.id(), body.currentPassword(), body.newPassword(), request.getSession().getId());
     }
 
     @DeleteMapping
