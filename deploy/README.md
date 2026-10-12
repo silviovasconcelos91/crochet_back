@@ -7,7 +7,9 @@ Caddy, qui obtient et renouvelle le certificat HTTPS.
 ## Préparer le VPS (une fois)
 
 1. Docker et le plugin compose installés ; un utilisateur de déploiement membre du groupe `docker`.
-2. Un enregistrement DNS A de votre domaine vers le VPS ; ports 80 et 443 ouverts.
+2. Un enregistrement DNS **A uniquement** (pas de AAAA) de votre domaine vers le VPS ; ports 80 et
+   443 ouverts. Sans IPv6 activé dans Docker, les clients IPv6 arriveraient tous avec l'adresse de
+   la passerelle Docker et partageraient un seul quota de la limite de tentatives de connexion.
 3. `sudo mkdir -p /opt/crochet-back && sudo chown <utilisateur> /opt/crochet-back`
 4. Créer `/opt/crochet-back/.env` (jamais versionné) :
 
@@ -17,9 +19,17 @@ Caddy, qui obtient et renouvelle le certificat HTTPS.
        DOMAIN=api.mondomaine.fr
        CROCHET_CORS_ALLOWEDORIGINS=https://app.mondomaine.fr
 
-   `host.docker.internal` désigne le VPS lui-même (Postgres installé sur l'hôte, qui doit alors
-   écouter sur l'interface Docker et l'autoriser dans `pg_hba.conf`). Le front doit être sur le même
-   site que l'API (même domaine parent) : le cookie de session est `SameSite=Lax`.
+   Compose interprète les `$` du fichier : un mot de passe qui en contient s'écrit entre apostrophes
+   (`DB_PASSWORD='mot$de$passe'`). Le front doit être sur le même site que l'API (même domaine
+   parent) : le cookie de session est `SameSite=Lax`.
+
+   **Postgres installé sur le VPS lui-même** : `host.docker.internal` désigne l'hôte vu depuis le
+   conteneur (l'interface `docker0`, en général `172.17.0.1`), mais les connexions arrivent depuis
+   le réseau du compose (`172.18.0.0/16` ou voisin). Il faut donc :
+   - dans `postgresql.conf` : `listen_addresses = 'localhost,172.17.0.1'` (Postgres doit démarrer
+     après Docker pour que cette adresse existe, ou utiliser `'*'` avec un pare-feu) ;
+   - dans `pg_hba.conf` : `host crochet crochet 172.16.0.0/12 scram-sha-256` ;
+   - si un pare-feu tourne (ufw) : autoriser le port 5432 depuis `172.16.0.0/12`.
 5. Une clé SSH dédiée au déploiement : `ssh-keygen -t ed25519 -f crochet-deploy -N ""`, la clé
    publique dans `~/.ssh/authorized_keys` de l'utilisateur de déploiement.
 

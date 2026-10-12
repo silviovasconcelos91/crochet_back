@@ -18,6 +18,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,6 +33,7 @@ jobs:
     if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     environment: production
     services:
       postgres:
@@ -89,6 +91,7 @@ jobs:
   deploy:
     needs: native
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: production
     concurrency:
       group: production
@@ -123,13 +126,14 @@ jobs:
         env:
           DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
         run: |
-          for _ in $(seq 30); do
-            status="$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/api/auth/csrf" || true)"
+          # up to ~5 min: on the first deploy Caddy still has to obtain the certificate
+          for _ in $(seq 60); do
+            status="$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "https://$DOMAIN/api/auth/csrf" || true)"
             if [ "$status" = 204 ]; then
               echo "API answers on https://$DOMAIN"
               exit 0
             fi
-            sleep 2
+            sleep 5
           done
           echo "API did not answer 204 on https://$DOMAIN (last status: $status)" >&2
           exit 1
