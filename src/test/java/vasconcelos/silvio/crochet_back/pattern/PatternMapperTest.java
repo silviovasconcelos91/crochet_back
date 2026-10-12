@@ -52,7 +52,9 @@ class PatternMapperTest {
 
     @Test
     void toResponseKeepsStepAndRowOrder() {
-        PatternResponse response = mapper.toResponse(mapper.toEntity(request), null);
+        Pattern pattern = mapper.toEntity(request);
+        pattern.setOwnerId(1L);
+        PatternResponse response = mapper.toResponse(pattern, null, "moi", 1L);
 
         assertThat(response.title()).isEqualTo("Chat");
         assertThat(response.hookSizeMm()).isEqualByComparingTo("3.5");

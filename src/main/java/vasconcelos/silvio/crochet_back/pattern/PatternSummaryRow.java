@@ -13,6 +13,8 @@ public record PatternSummaryRow(
         String imageUrl,
         Integer stepCount,
         Visibility visibility,
+        Long ownerId,
+        String authorUsername,
         ProgressStatus status,
         Integer stepPosition,
         Integer rowPosition,

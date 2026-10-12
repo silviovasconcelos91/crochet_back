@@ -19,19 +19,28 @@ public class PatternService {
     private final PatternMapper mapper;
 
     public List<PatternSummary> list(long accountId) {
-        return repository.findAllSummaries(accountId).stream().map(mapper::toSummary).toList();
+        return repository.findAllSummaries(accountId).stream().map(row -> mapper.toSummary(row, accountId)).toList();
+    }
+
+    public List<PatternSummary> listPublic(long accountId) {
+        return repository.findPublicSummaries(accountId).stream().map(row -> mapper.toSummary(row, accountId)).toList();
     }
 
     public PatternResponse get(long accountId, long id) {
         Pattern pattern = repository.findReadable(id, accountId).orElseThrow(() -> new PatternNotFoundException(id));
-        return mapper.toResponse(pattern, progress.findById(new PatternProgress.Key(id, accountId)).orElse(null));
+        return respond(pattern, accountId);
+    }
+
+    private PatternResponse respond(Pattern pattern, long accountId) {
+        PatternProgress mine = progress.findById(new PatternProgress.Key(pattern.getId(), accountId)).orElse(null);
+        return mapper.toResponse(pattern, mine, repository.findAuthorUsername(pattern.getOwnerId()), accountId);
     }
 
     @Transactional
     public PatternResponse create(long accountId, PatternRequest request) {
         Pattern pattern = mapper.toEntity(request);
         pattern.setOwnerId(accountId);
-        return mapper.toResponse(repository.save(pattern), null);
+        return respond(repository.save(pattern), accountId);
     }
 
     @Transactional
@@ -48,7 +57,7 @@ public class PatternService {
         repository.flush();
         progress.findAllByPatternIdForUpdate(id).forEach(row -> row.clampTo(pattern.getSteps()));
         progress.flush();
-        return mapper.toResponse(pattern, progress.findById(new PatternProgress.Key(id, accountId)).orElse(null));
+        return respond(pattern, accountId);
     }
 
     @Transactional
@@ -57,9 +66,14 @@ public class PatternService {
         repository.delete(findForWrite(accountId, id));
     }
 
-    /** The pattern, exclusively locked, for its owner. */
+    /** The pattern, exclusively locked, for its owner: 404 when invisible, 403 when public but not theirs. */
     Pattern findForWrite(long accountId, long id) {
-        return repository.findReadableForUpdate(id, accountId).orElseThrow(() -> new PatternNotFoundException(id));
+        Pattern pattern = repository.findReadableForUpdate(id, accountId)
+                .orElseThrow(() -> new PatternNotFoundException(id));
+        if (pattern.getOwnerId() != accountId) {
+            throw new PatternAccessDeniedException(id);
+        }
+        return pattern;
     }
 
     /**

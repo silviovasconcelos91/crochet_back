@@ -35,6 +35,11 @@ public class PatternController {
         return service.list(principal.id());
     }
 
+    @GetMapping("/public")
+    public List<PatternSummary> listPublic(@AuthenticationPrincipal AccountPrincipal principal) {
+        return service.listPublic(principal.id());
+    }
+
     @GetMapping("/{id}")
     public PatternResponse get(@AuthenticationPrincipal AccountPrincipal principal, @PathVariable long id) {
         return service.get(principal.id(), id);

@@ -13,5 +13,7 @@ public record PatternSummary(
         String imageUrl,
         Integer stepCount,
         ProgressResponse progress,
-        Visibility visibility) {
+        Visibility visibility,
+        AuthorResponse author,
+        boolean mine) {
 }

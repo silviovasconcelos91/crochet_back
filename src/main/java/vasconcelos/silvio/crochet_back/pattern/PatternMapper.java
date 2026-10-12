@@ -1,6 +1,7 @@
 package vasconcelos.silvio.crochet_back.pattern;
 
 import org.springframework.stereotype.Component;
+import vasconcelos.silvio.crochet_back.pattern.dto.AuthorResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternSummary;
@@ -64,7 +65,8 @@ public class PatternMapper {
     }
 
     /** {@code progress} is the logged-in account's, {@code null} when it has not started. */
-    public PatternResponse toResponse(Pattern pattern, PatternProgress progress) {
+    public PatternResponse toResponse(
+            Pattern pattern, PatternProgress progress, String authorUsername, long accountId) {
         List<StepResponse> steps = pattern.getSteps().stream()
                 .map(step -> new StepResponse(step.getTitle(), step.getRows().stream()
                         .map(row -> new RowResponse(row.getNumber(), row.getValue()))
@@ -82,15 +84,18 @@ public class PatternMapper {
                 pattern.getUpdatedAt(),
                 steps,
                 toProgressResponse(progress),
-                pattern.getVisibility());
+                pattern.getVisibility(),
+                new AuthorResponse(authorUsername),
+                pattern.getOwnerId() == accountId);
     }
 
-    public PatternSummary toSummary(PatternSummaryRow row) {
+    public PatternSummary toSummary(PatternSummaryRow row, long accountId) {
         ProgressResponse progress = row.status() == null ? null : new ProgressResponse(
                 row.status(), row.stepPosition(), row.rowPosition(),
                 row.startedAt(), row.updatedAt(), row.finishedAt());
         return new PatternSummary(
                 row.id(), row.title(), row.description(), row.hookSizeMm(), row.yarn(), row.imageUrl(),
-                row.stepCount(), progress, row.visibility());
+                row.stepCount(), progress, row.visibility(), new AuthorResponse(row.authorUsername()),
+                row.ownerId() == accountId);
     }
 }

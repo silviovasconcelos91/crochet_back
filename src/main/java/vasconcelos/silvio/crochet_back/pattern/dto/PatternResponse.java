@@ -18,5 +18,7 @@ public record PatternResponse(
         Instant updatedAt,
         List<StepResponse> steps,
         ProgressResponse progress,
-        Visibility visibility) {
+        Visibility visibility,
+        AuthorResponse author,
+        boolean mine) {
 }

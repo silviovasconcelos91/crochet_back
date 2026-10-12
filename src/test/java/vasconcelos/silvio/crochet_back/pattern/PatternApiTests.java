@@ -108,7 +108,9 @@ class PatternApiTests {
                 .andExpect(jsonPath("$.steps[0].rows[1].value").value("6aug (12)"))
                 .andExpect(jsonPath("$.steps[0].rows[2].value").value("3ms, [1ms, 4aug]x6 (34)"))
                 .andExpect(jsonPath("$.steps[1].title").value("Corps"))
-                .andExpect(jsonPath("$.steps[1].rows[0].number").value("1-10"));
+                .andExpect(jsonPath("$.steps[1].rows[0].number").value("1-10"))
+                .andExpect(jsonPath("$.author.username").value("moi"))
+                .andExpect(jsonPath("$.mine").value(true));
     }
 
     @Test

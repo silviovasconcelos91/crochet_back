@@ -21,6 +21,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.MismatchedInputException;
 import vasconcelos.silvio.crochet_back.account.AlreadyUsedException;
 import vasconcelos.silvio.crochet_back.account.TooManyAttemptsException;
+import vasconcelos.silvio.crochet_back.pattern.PatternAccessDeniedException;
 import vasconcelos.silvio.crochet_back.pattern.PatternNotFoundException;
 import vasconcelos.silvio.crochet_back.pattern.ProgressNotFoundException;
 
@@ -38,6 +39,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(PatternNotFoundException.class)
     ProblemDetail handleNotFound(PatternNotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(PatternAccessDeniedException.class)
+    ProblemDetail handlePatternAccessDenied(PatternAccessDeniedException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
     @ExceptionHandler(BadCredentialsException.class)
