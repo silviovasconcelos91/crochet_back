@@ -45,19 +45,19 @@ TRUNCATE account, pattern, spring_session RESTART IDENTITY CASCADE
 
 account (modifiée)
   username       varchar(30) NOT NULL     -- tel que saisi (casse conservée, NFC)
-  username_key   varchar(30) NOT NULL     -- forme normalisée, voir « Pseudo »
+  username_key   varchar(60) NOT NULL     -- forme normalisée (les minuscules peuvent allonger)
   CONSTRAINT uk_account_username_key UNIQUE (username_key)
 ```
 
-### Migration V8 — visibilité et avancement par compte
+### Migrations V8 (visibilité) et V9 (avancement par compte)
 
 ```
-pattern (modifiée)
+pattern (modifiée, V8)
   visibility     varchar(10) NOT NULL DEFAULT 'PRIVATE'
                  CHECK (visibility IN ('PRIVATE', 'PUBLIC'))
-  INDEX (visibility)                      -- catalogue
+  INDEX (lower(title), id) WHERE visibility = 'PUBLIC'   -- catalogue
 
-pattern_progress (recréée, vide)
+pattern_progress (recréée, vide, V9)
   pattern_id     bigint NOT NULL FK → pattern(id) ON DELETE CASCADE
   account_id     bigint NOT NULL FK → account(id) ON DELETE CASCADE
   PRIMARY KEY (pattern_id, account_id)
@@ -66,8 +66,8 @@ pattern_progress (recréée, vide)
                  -- colonnes et CHECK inchangés
 ```
 
-Deux migrations pour garder une suite verte à chaque étape d'implémentation : V7 avec le pseudo,
-V8 avec la visibilité.
+Trois migrations pour garder une suite verte à chaque étape d'implémentation : V7 avec le pseudo,
+V8 avec la visibilité, V9 avec l'avancement par compte.
 
 ### Pseudo
 
@@ -173,7 +173,7 @@ account/
   AccountService                 register(username, email, password), changeUsername
   AccountPrincipal               id comme getUsername(), + username pour l'affichage
   AccountUserDetailsService      charge par username_key
-  UsernameAlreadyUsedException   (à côté d'EmailAlreadyUsedException)
+  AlreadyUsedException           remplace EmailAlreadyUsedException ; porte les champs en conflit
   dto/  RegisterRequest (+ username), LoginRequest (username), ChangeUsernameRequest,
         AccountResponse (+ username)
 pattern/
@@ -214,6 +214,6 @@ TDD, Testcontainers PostgreSQL, MockMvc. Les classes `@Transactional` vident la 
   compte B supprime son avancement, pas le pattern.
 - **Concurrence** : deux comptes écrivent leur avancement en parallèle sans blocage ; premier `PUT`
   de progress doublé → pas de 500.
-- **Migrations** : `SchemaMigrationTests` couvre V7 et V8 (contraintes, index).
+- **Migrations** : `SchemaMigrationTests` couvre V7, V8 et V9 (contraintes, clés).
 - **Doc** : `docs/front-api.md` mis à jour (pseudo, login, visibilité, catalogue, matrice d'accès,
   avancement par compte).
