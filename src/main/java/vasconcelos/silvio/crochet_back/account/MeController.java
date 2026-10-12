@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import vasconcelos.silvio.crochet_back.account.dto.AccountResponse;
 import vasconcelos.silvio.crochet_back.account.dto.ChangePasswordRequest;
+import vasconcelos.silvio.crochet_back.account.dto.ChangeUsernameRequest;
 import vasconcelos.silvio.crochet_back.account.dto.DeleteAccountRequest;
 import vasconcelos.silvio.crochet_back.config.InvalidFieldException;
 
@@ -31,6 +32,12 @@ public class MeController {
     @GetMapping
     public AccountResponse me(@AuthenticationPrincipal AccountPrincipal principal) {
         return AccountResponse.from(accountService.get(principal.id()));
+    }
+
+    @PutMapping("/username")
+    public AccountResponse changeUsername(
+            @AuthenticationPrincipal AccountPrincipal principal, @Valid @RequestBody ChangeUsernameRequest body) {
+        return AccountResponse.from(accountService.changeUsername(principal.id(), body.username()));
     }
 
     @PutMapping("/password")

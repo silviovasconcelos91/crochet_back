@@ -190,4 +190,57 @@ class AccountManagementApiTests {
         assertThat(count("pattern_progress")).isZero();
         assertThat(count("spring_session")).isZero();
     }
+
+    static String usernameChange(String username) {
+        return """
+                { "username": "%s" }""".formatted(username);
+    }
+
+    @Test
+    void changeUsernameKeepsTheSessionAndLogsInWithTheNewName() throws Exception {
+        Browser browser = registered();
+
+        browser.perform(put("/api/me/username").contentType(APPLICATION_JSON).content(usernameChange("Nouveau")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("Nouveau"));
+        browser.perform(get("/api/me")).andExpect(status().isOk()).andExpect(jsonPath("$.username").value("Nouveau"));
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content("{ \"username\": \"nouveau\", \"password\": \"%s\" }".formatted(PASSWORD)))
+                .andExpect(status().isOk());
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials(PASSWORD)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void changeToAnotherAccountsNameInOtherCaseIsConflict() throws Exception {
+        Browser browser = registered();
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content("{ \"username\": \"Pris\", \"email\": \"pris@exemple.fr\", \"password\": \"%s\" }"
+                                .formatted(PASSWORD)))
+                .andExpect(status().isCreated());
+
+        browser.perform(put("/api/me/username").contentType(APPLICATION_JSON).content(usernameChange("PRIS")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors[0].field").value("username"));
+    }
+
+    @Test
+    void changeToOwnNameInOtherCaseOnlyChangesTheDisplay() throws Exception {
+        Browser browser = registered();
+
+        browser.perform(put("/api/me/username").contentType(APPLICATION_JSON).content(usernameChange("MOI")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("MOI"));
+    }
+
+    @Test
+    void invalidNewUsernameIsBadRequest() throws Exception {
+        registered().perform(put("/api/me/username").contentType(APPLICATION_JSON).content(usernameChange("a b")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("username"));
+    }
 }

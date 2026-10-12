@@ -63,6 +63,26 @@ public class AccountService {
                 .orElseThrow(() -> new InsufficientAuthenticationException("Account no longer exists"));
     }
 
+    /** {@code username} must already be normalized. The sessions survive: their principal is the id. */
+    @Transactional
+    public Account changeUsername(long id, String username) {
+        Account account = get(id);
+        String key = Usernames.key(username);
+        if (!key.equals(account.getUsernameKey()) && accounts.existsByUsernameKey(key)) {
+            throw new AlreadyUsedException(List.of("username"));
+        }
+        account.rename(username);
+        try {
+            accounts.flush();
+        } catch (DataIntegrityViolationException ex) {
+            if (violates(ex, "uk_account_username_key")) {
+                throw new AlreadyUsedException(List.of("username")); // taken concurrently
+            }
+            throw ex;
+        }
+        return account;
+    }
+
     /**
      * Ends every other session of the account in the same transaction as the new password (see
      * SessionTransactionConfig): both are committed together or not at all.
