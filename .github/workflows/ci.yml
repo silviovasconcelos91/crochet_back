@@ -83,6 +83,15 @@ jobs:
           echo "image=$DOCKERHUB_USERNAME/crochet-back" >> "$GITHUB_OUTPUT"
           echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
+      # temporary: diagnoses "malformed HTTP Authorization header" without printing the values
+      - name: Check Docker Hub credentials
+        env:
+          U: ${{ vars.DOCKERHUB_USERNAME }}
+          P: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          echo "user len=${#U} token len=${#P}"
+          [[ "$U$P" =~ [[:space:]] ]] && echo "whitespace found" || echo "no whitespace"
+          [[ "$P" == dckr_pat_* ]] && echo "token prefix ok" || echo "unexpected token prefix"
       - uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
