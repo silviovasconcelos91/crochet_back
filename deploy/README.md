@@ -33,12 +33,20 @@ Caddy, qui obtient et renouvelle le certificat HTTPS.
 5. Une clé SSH dédiée au déploiement : `ssh-keygen -t ed25519 -f crochet-deploy -N ""`, la clé
    publique dans `~/.ssh/authorized_keys` de l'utilisateur de déploiement.
 
-## Secrets GitHub (environnement `production`)
+## Secrets et variables GitHub
+
+Au niveau du **dépôt** (Settings → Secrets and variables → Actions), utilisés pour publier l'image :
 
 | Nom | Type | Valeur |
 |---|---|---|
-| `DOCKERHUB_USERNAME` | secret | votre identifiant Docker Hub |
+| `DOCKERHUB_USERNAME` | variable | votre identifiant Docker Hub (non secret : il apparaît dans le nom de l'image) |
 | `DOCKERHUB_TOKEN` | secret | un access token Docker Hub (Read & Write) |
+
+Dans l'**environnement `production`**, utilisés seulement par le job de déploiement (une règle
+d'approbation éventuelle sur cet environnement n'est donc demandée qu'une fois par release) :
+
+| Nom | Type | Valeur |
+|---|---|---|
 | `VPS_HOST` | secret | adresse du VPS |
 | `VPS_USER` | secret | utilisateur de déploiement |
 | `VPS_SSH_KEY` | secret | contenu de la clé privée `crochet-deploy` |
@@ -54,7 +62,8 @@ Caddy, qui obtient et renouvelle le certificat HTTPS.
 
 ## Règle pour les migrations
 
-Une migration Flyway appliquée ne se défait pas : une version plus ancienne refusera de démarrer sur
-un schéma qu'elle ne connaît pas. Chaque migration doit donc rester compatible avec la version
-précédente (ajouter avant de supprimer, en deux déploiements), pour que le retour arrière reste
-possible.
+Une migration Flyway appliquée ne se défait pas. Flyway laisse démarrer une version plus ancienne
+sur un schéma plus récent, mais la validation Hibernate (`ddl-auto: validate`) ou le code de cette
+version échouent si une table ou une colonne qu'ils utilisent a disparu ou changé. Chaque migration
+doit donc rester compatible avec la version précédente (ajouter avant de supprimer, en deux
+déploiements), pour que le retour arrière reste possible.

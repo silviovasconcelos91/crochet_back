@@ -95,16 +95,19 @@ Copié dans `/opt/crochet-back` à chaque déploiement.
 - **`README.md`** : préparation du VPS, contenu du `.env`, secrets GitHub, retour arrière, règle
   des migrations compatibles avec la version précédente.
 
-### Secrets et variables GitHub (environnement `production`)
+### Secrets et variables GitHub
 
-| Nom | Type | Usage |
-|---|---|---|
-| `DOCKERHUB_USERNAME` | secret | login Docker Hub, préfixe de l'image |
-| `DOCKERHUB_TOKEN` | secret | token d'accès Docker Hub (pas le mot de passe) |
-| `VPS_HOST`, `VPS_USER` | secrets | cible SSH |
-| `VPS_SSH_KEY` | secret | clé privée dédiée au déploiement |
-| `VPS_KNOWN_HOSTS` | secret | empreinte du serveur épinglée (pas de confiance au premier contact) |
-| `DEPLOY_DOMAIN` | variable | vérification HTTPS finale |
+Docker Hub au niveau du dépôt (job `native`) ; cible SSH dans l'environnement `production` (job
+`deploy` seul, donc une approbation au plus par release).
+
+| Nom | Niveau | Type | Usage |
+|---|---|---|---|
+| `DOCKERHUB_USERNAME` | dépôt | variable | login Docker Hub, préfixe de l'image (non secret) |
+| `DOCKERHUB_TOKEN` | dépôt | secret | token d'accès Docker Hub (pas le mot de passe) |
+| `VPS_HOST`, `VPS_USER` | production | secrets | cible SSH |
+| `VPS_SSH_KEY` | production | secret | clé privée dédiée au déploiement |
+| `VPS_KNOWN_HOSTS` | production | secret | empreinte du serveur épinglée (pas de confiance au premier contact) |
+| `DEPLOY_DOMAIN` | production | variable | vérification HTTPS finale |
 
 L'image est publique (elle ne contient aucun secret) ; si elle devient privée, un `docker login`
 unique sur le VPS suffit.

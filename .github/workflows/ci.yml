@@ -34,7 +34,11 @@ jobs:
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    environment: production
+    # Docker Hub credentials are repository-level: only the deploy job uses the production
+    # environment, so an approval rule on it is asked once per release
+    outputs:
+      image: ${{ steps.release.outputs.image }}
+      tag: ${{ steps.release.outputs.tag }}
     services:
       postgres:
         image: postgres:17
@@ -71,13 +75,17 @@ jobs:
       - name: Show the native binary log
         if: failure()
         run: cat native.log
-      - name: Compute the image tag
-        id: tag
-        run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Name the release
+        id: release
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        run: |
+          echo "image=$DOCKERHUB_USERNAME/crochet-back" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build and push the image
         uses: docker/build-push-action@v6
@@ -85,8 +93,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/crochet-back:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/crochet-back:${{ steps.tag.outputs.sha }}
+            ${{ steps.release.outputs.image }}:latest
+            ${{ steps.release.outputs.image }}:${{ steps.release.outputs.tag }}
 
   deploy:
     needs: native
@@ -112,10 +120,9 @@ jobs:
           printf 'Host *\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
       - name: Write the release file
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          printf 'DOCKERHUB_IMAGE=%s/crochet-back\nIMAGE_TAG=sha-%s\n' \
-            "$DOCKERHUB_USERNAME" "${GITHUB_SHA::7}" > deploy/release.env
+          IMAGE: ${{ needs.native.outputs.image }}
+          TAG: ${{ needs.native.outputs.tag }}
+        run: printf 'DOCKERHUB_IMAGE=%s\nIMAGE_TAG=%s\n' "$IMAGE" "$TAG" > deploy/release.env
       - name: Copy the stack to the VPS
         run: |
           scp deploy/compose.yaml deploy/Caddyfile deploy/deploy.sh deploy/release.env \
