@@ -30,6 +30,25 @@ public class PatternService {
         return mapper.toResponse(repository.save(mapper.toEntity(request)));
     }
 
+    @Transactional
+    public PatternResponse replace(long id, PatternRequest request) {
+        Pattern pattern = find(id);
+        mapper.applyFields(request, pattern);
+        // Hibernate flushes inserts before orphan deletes; removing old steps first avoids
+        // violating UNIQUE(pattern_id, position) when new steps reuse the same positions.
+        pattern.getSteps().clear();
+        repository.flush();
+        mapper.toSteps(request.steps()).forEach(pattern::addStep);
+        pattern.touch();
+        repository.flush();
+        return mapper.toResponse(pattern);
+    }
+
+    @Transactional
+    public void delete(long id) {
+        repository.delete(find(id));
+    }
+
     private Pattern find(long id) {
         return repository.findById(id).orElseThrow(() -> new PatternNotFoundException(id));
     }
