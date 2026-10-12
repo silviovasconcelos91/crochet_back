@@ -66,8 +66,8 @@ Décisions :
 - **`number` en texte** : les patterns utilisent des plages de rangs (`"4-10"`).
 - **`position` séparée de `number`** : l'ordre d'affichage vient de l'ordre du tableau JSON, pas du
   contenu de `number`. Positions indexées à partir de 0.
-- `created_at` / `updated_at` sont renseignés par l'application (`@CreationTimestamp` /
-  `@UpdateTimestamp`).
+- `created_at` / `updated_at` sont renseignés par l'application : les deux à la création
+  (`@PrePersist`), `updated_at` explicitement à chaque PUT, même si seuls les étapes/rangs changent.
 
 ## 3. API REST
 
