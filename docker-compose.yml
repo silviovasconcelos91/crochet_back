@@ -1,14 +1,24 @@
+# Local database for the `local` Spring profile (application-local.yaml).
+# Host port 5433: a native Postgres already listens on 5432.
+# Start: docker compose up -d    Stop: docker compose down    Wipe data: docker compose down -v
 services:
   postgres:
     image: postgres:17
+    container_name: crochet-postgres
     environment:
       POSTGRES_DB: crochet
       POSTGRES_USER: crochet
       POSTGRES_PASSWORD: crochet
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - crochet-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crochet -d crochet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
   crochet-data:
