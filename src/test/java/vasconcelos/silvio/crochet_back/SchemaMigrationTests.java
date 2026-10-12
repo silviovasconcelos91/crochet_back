@@ -27,4 +27,16 @@ class SchemaMigrationTests {
 
         assertThat(tables).containsExactly("pattern", "pattern_row", "step");
     }
+
+    @Test
+    void flywayCreatesAccountAndSessionTables() {
+        List<String> tables = jdbc.queryForList("""
+                select table_name from information_schema.tables
+                where table_schema = 'public'
+                  and table_name in ('account', 'spring_session', 'spring_session_attributes')
+                order by table_name
+                """, String.class);
+
+        assertThat(tables).containsExactly("account", "spring_session", "spring_session_attributes");
+    }
 }
