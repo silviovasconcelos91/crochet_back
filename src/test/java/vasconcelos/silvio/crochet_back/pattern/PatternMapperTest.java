@@ -3,6 +3,7 @@ package vasconcelos.silvio.crochet_back.pattern;
 import org.junit.jupiter.api.Test;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternResponse;
+import vasconcelos.silvio.crochet_back.pattern.dto.ProgressResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.RowRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.RowResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.StepRequest;
@@ -75,5 +76,20 @@ class PatternMapperTest {
         assertThat(pattern.getSourceUrl()).isNull();
         assertThat(pattern.getImageUrl()).isNull();
         assertThat(pattern.getSteps()).hasSize(2);
+    }
+
+    @Test
+    void toResponseHasNoProgressUntilStartedThenMapsIt() {
+        Pattern pattern = mapper.toEntity(request);
+        assertThat(mapper.toResponse(pattern).progress()).isNull();
+
+        pattern.updateProgress(ProgressStatus.IN_PROGRESS, 1, 0);
+
+        ProgressResponse progress = mapper.toResponse(pattern).progress();
+        assertThat(progress.status()).isEqualTo(ProgressStatus.IN_PROGRESS);
+        assertThat(progress.stepIndex()).isEqualTo(1);
+        assertThat(progress.rowIndex()).isZero();
+        assertThat(progress.startedAt()).isNotNull();
+        assertThat(progress.finishedAt()).isNull();
     }
 }

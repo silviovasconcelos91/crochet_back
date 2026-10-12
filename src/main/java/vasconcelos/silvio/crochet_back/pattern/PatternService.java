@@ -18,7 +18,7 @@ public class PatternService {
     private final PatternMapper mapper;
 
     public List<PatternSummary> list(long ownerId) {
-        return repository.findAllSummaries(ownerId);
+        return repository.findAllSummaries(ownerId).stream().map(mapper::toSummary).toList();
     }
 
     public PatternResponse get(long ownerId, long id) {
@@ -41,6 +41,9 @@ public class PatternService {
         pattern.getSteps().clear();
         repository.flush();
         mapper.toSteps(request.steps()).forEach(pattern::addStep);
+        if (pattern.getProgress() != null) {
+            pattern.getProgress().clampTo(pattern.getSteps());
+        }
         pattern.touch();
         repository.flush();
         return mapper.toResponse(pattern);

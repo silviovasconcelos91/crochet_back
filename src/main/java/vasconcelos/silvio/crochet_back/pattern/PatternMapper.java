@@ -3,6 +3,7 @@ package vasconcelos.silvio.crochet_back.pattern;
 import org.springframework.stereotype.Component;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternResponse;
+import vasconcelos.silvio.crochet_back.pattern.dto.PatternSummary;
 import vasconcelos.silvio.crochet_back.pattern.dto.ProgressResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.RowRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.RowResponse;
@@ -76,6 +77,16 @@ public class PatternMapper {
                 pattern.getImageUrl(),
                 pattern.getCreatedAt(),
                 pattern.getUpdatedAt(),
-                steps);
+                steps,
+                toProgressResponse(pattern.getProgress()));
+    }
+
+    public PatternSummary toSummary(PatternSummaryRow row) {
+        ProgressResponse progress = row.status() == null ? null : new ProgressResponse(
+                row.status(), row.stepPosition(), row.rowPosition(),
+                row.startedAt(), row.updatedAt(), row.finishedAt());
+        return new PatternSummary(
+                row.id(), row.title(), row.description(), row.hookSizeMm(), row.yarn(), row.imageUrl(),
+                row.stepCount(), progress);
     }
 }

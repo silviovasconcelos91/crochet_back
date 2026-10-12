@@ -14,5 +14,6 @@ public record PatternResponse(
         String imageUrl,
         Instant createdAt,
         Instant updatedAt,
-        List<StepResponse> steps) {
+        List<StepResponse> steps,
+        ProgressResponse progress) {
 }

@@ -28,6 +28,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -188,5 +189,64 @@ class ProgressApiTests {
         mvc.perform(delete(location)).andExpect(status().isNoContent());
 
         assertThat(jdbc.queryForObject("select count(*) from pattern_progress", Integer.class)).isZero();
+    }
+
+    static final String ONE_STEP = PatternJson.withSteps("\"title\": \"Chat v2\",", """
+            [ { "title": "Unique", "rows": [
+                { "number": "1", "value": "8ms (8)" },
+                { "number": "2", "value": "8aug (16)" } ] } ]""");
+
+    @Test
+    void progressIsNullUntilStartedThenAppearsInDetailAndSummary() throws Exception {
+        mvc.perform(get(location)).andExpect(jsonPath("$.progress").doesNotExist());
+        mvc.perform(get("/api/patterns")).andExpect(jsonPath("$[0].progress").doesNotExist());
+
+        putProgressOk(progress("IN_PROGRESS", 1, 0));
+
+        mvc.perform(get(location))
+                .andExpect(jsonPath("$.progress.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.progress.stepIndex").value(1))
+                .andExpect(jsonPath("$.progress.rowIndex").value(0))
+                .andExpect(jsonPath("$.progress.startedAt").value(notNullValue()));
+        mvc.perform(get("/api/patterns"))
+                .andExpect(jsonPath("$[0].progress.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$[0].progress.stepIndex").value(1))
+                .andExpect(jsonPath("$[0].progress.rowIndex").value(0));
+    }
+
+    @Test
+    void replacingPatternClampsRowIntoNewStructure() throws Exception {
+        putProgressOk(progress("IN_PROGRESS", 0, 2)); // third row of "Tête"
+
+        mvc.perform(put(location).contentType(APPLICATION_JSON).content(ONE_STEP)).andExpect(status().isOk());
+
+        mvc.perform(get(location))
+                .andExpect(jsonPath("$.progress.stepIndex").value(0))
+                .andExpect(jsonPath("$.progress.rowIndex").value(1))
+                .andExpect(jsonPath("$.progress.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    void replacingPatternClampsStepAndKeepsStatus() throws Exception {
+        String finished = putProgressOk(progress("FINISHED", 1, 0)); // "Corps"
+
+        mvc.perform(put(location).contentType(APPLICATION_JSON).content(ONE_STEP)).andExpect(status().isOk());
+
+        String detail = mvc.perform(get(location)).andReturn().getResponse().getContentAsString();
+        assertThat((Integer) JsonPath.read(detail, "$.progress.stepIndex")).isEqualTo(0);
+        assertThat((Integer) JsonPath.read(detail, "$.progress.rowIndex")).isEqualTo(0);
+        assertThat((String) JsonPath.read(detail, "$.progress.status")).isEqualTo("FINISHED");
+        assertThat(instant(detail, "$.progress.startedAt")).isEqualTo(instant(finished, "$.startedAt"));
+    }
+
+    @Test
+    void replacingPatternKeepsProgressStillInRange() throws Exception {
+        putProgressOk(progress("IN_PROGRESS", 0, 1));
+
+        mvc.perform(put(location).contentType(APPLICATION_JSON).content(CHAT)).andExpect(status().isOk());
+
+        mvc.perform(get(location))
+                .andExpect(jsonPath("$.progress.stepIndex").value(0))
+                .andExpect(jsonPath("$.progress.rowIndex").value(1));
     }
 }

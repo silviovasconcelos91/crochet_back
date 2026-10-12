@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 import vasconcelos.silvio.crochet_back.account.Account;
 import vasconcelos.silvio.crochet_back.account.AccountRepository;
-import vasconcelos.silvio.crochet_back.pattern.dto.PatternSummary;
 
 import java.util.List;
 
@@ -70,10 +69,10 @@ class PatternRepositoryTests {
         repository.save(pattern("Chat", 2));
         repository.save(pattern("abeille", 3));
 
-        List<PatternSummary> summaries = repository.findAllSummaries(ownerId);
+        List<PatternSummaryRow> summaries = repository.findAllSummaries(ownerId);
 
-        assertThat(summaries).extracting(PatternSummary::title).containsExactly("abeille", "Chat", "zèbre");
-        assertThat(summaries).extracting(PatternSummary::stepCount).containsExactly(3, 2, 1);
+        assertThat(summaries).extracting(PatternSummaryRow::title).containsExactly("abeille", "Chat", "zèbre");
+        assertThat(summaries).extracting(PatternSummaryRow::stepCount).containsExactly(3, 2, 1);
     }
 
     @Test
@@ -85,9 +84,9 @@ class PatternRepositoryTests {
         first.setDescription("modifié");
         em.flush();
 
-        List<PatternSummary> summaries = repository.findAllSummaries(ownerId);
+        List<PatternSummaryRow> summaries = repository.findAllSummaries(ownerId);
 
-        assertThat(summaries).extracting(PatternSummary::id).containsExactly(first.getId(), second.getId());
+        assertThat(summaries).extracting(PatternSummaryRow::id).containsExactly(first.getId(), second.getId());
     }
 
     @Test
@@ -98,7 +97,7 @@ class PatternRepositoryTests {
         theirs.setOwnerId(otherOwner);
         repository.save(theirs);
 
-        assertThat(repository.findAllSummaries(ownerId)).extracting(PatternSummary::title).containsExactly("Mien");
+        assertThat(repository.findAllSummaries(ownerId)).extracting(PatternSummaryRow::title).containsExactly("Mien");
         assertThat(repository.findByIdAndOwnerId(mine.getId(), ownerId)).isPresent();
         assertThat(repository.findByIdAndOwnerId(theirs.getId(), ownerId)).isEmpty();
     }

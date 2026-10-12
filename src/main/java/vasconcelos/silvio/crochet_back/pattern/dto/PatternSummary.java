@@ -9,5 +9,6 @@ public record PatternSummary(
         BigDecimal hookSizeMm,
         String yarn,
         String imageUrl,
-        Integer stepCount) {
+        Integer stepCount,
+        ProgressResponse progress) {
 }

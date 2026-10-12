@@ -16,6 +16,7 @@ import lombok.NoArgsConstructor;
 import vasconcelos.silvio.crochet_back.Timestamps;
 
 import java.time.Instant;
+import java.util.List;
 
 /** Current step and row of a started pattern; positions are 0-based like Step/PatternRow positions. */
 @Entity
@@ -68,5 +69,14 @@ public class PatternProgress {
         stepPosition = newStepPosition;
         rowPosition = newRowPosition;
         updatedAt = Timestamps.now();
+    }
+
+    /**
+     * Moves the position back inside {@code steps} after the pattern was replaced; status, startedAt
+     * and updatedAt are left unchanged because the user did not move.
+     */
+    void clampTo(List<Step> steps) {
+        stepPosition = Math.min(stepPosition, steps.size() - 1);
+        rowPosition = Math.min(rowPosition, steps.get(stepPosition).getRows().size() - 1);
     }
 }
