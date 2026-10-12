@@ -12,3 +12,8 @@ spring:
     properties:
       hibernate:
         default_batch_fetch_size: 50
+
+crochet:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
