@@ -26,7 +26,7 @@ public interface PatternRepository extends JpaRepository<Pattern, Long> {
 
     @Query("""
             select new vasconcelos.silvio.crochet_back.pattern.PatternSummaryRow(
-                p.id, p.title, p.description, p.hookSizeMm, p.yarn, p.imageUrl, size(p.steps),
+                p.id, p.title, p.description, p.hookSizeMm, p.yarn, p.imageUrl, size(p.steps), p.visibility,
                 pr.status, pr.stepPosition, pr.rowPosition, pr.startedAt, pr.updatedAt, pr.finishedAt)
             from Pattern p left join p.progress pr
             where p.ownerId = :ownerId

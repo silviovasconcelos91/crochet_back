@@ -44,6 +44,8 @@ public class PatternMapper {
         pattern.setYarn(request.yarn());
         pattern.setSourceUrl(request.sourceUrl());
         pattern.setImageUrl(request.imageUrl());
+        // omitted means private, on PUT too: forgetting the field never publishes a pattern
+        pattern.setVisibility(request.visibility() == null ? Visibility.PRIVATE : request.visibility());
     }
 
     /** Builds detached steps whose positions follow the list order (0-based). */
@@ -78,7 +80,8 @@ public class PatternMapper {
                 pattern.getCreatedAt(),
                 pattern.getUpdatedAt(),
                 steps,
-                toProgressResponse(pattern.getProgress()));
+                toProgressResponse(pattern.getProgress()),
+                pattern.getVisibility());
     }
 
     public PatternSummary toSummary(PatternSummaryRow row) {
@@ -87,6 +90,6 @@ public class PatternMapper {
                 row.startedAt(), row.updatedAt(), row.finishedAt());
         return new PatternSummary(
                 row.id(), row.title(), row.description(), row.hookSizeMm(), row.yarn(), row.imageUrl(),
-                row.stepCount(), progress);
+                row.stepCount(), progress, row.visibility());
     }
 }

@@ -29,6 +29,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -69,6 +70,41 @@ class PatternWriteApiTests {
     void setUp() {
         TestDatabase.reset(jdbc);
         mvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "moi"));
+    }
+
+    @Test
+    void createIsPrivateByDefault() throws Exception {
+        String location = create(mvc, CHAT);
+
+        mvc.perform(get(location)).andExpect(jsonPath("$.visibility").value("PRIVATE"));
+        mvc.perform(get("/api/patterns")).andExpect(jsonPath("$[0].visibility").value("PRIVATE"));
+    }
+
+    @Test
+    void createCanBePublic() throws Exception {
+        String location = create(mvc, PatternJson.withSteps("\"title\": \"Chat\", \"visibility\": \"PUBLIC\",",
+                PatternJson.VALID_STEPS));
+
+        mvc.perform(get(location)).andExpect(jsonPath("$.visibility").value("PUBLIC"));
+    }
+
+    @Test
+    void replaceWithoutVisibilityMakesThePatternPrivate() throws Exception {
+        String location = create(mvc, PatternJson.withSteps("\"title\": \"Chat\", \"visibility\": \"PUBLIC\",",
+                PatternJson.VALID_STEPS));
+
+        mvc.perform(put(location).contentType(APPLICATION_JSON).content(PatternJson.titled("Chat")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visibility").value("PRIVATE"));
+    }
+
+    @Test
+    void unknownVisibilityIsBadRequest() throws Exception {
+        mvc.perform(post("/api/patterns").contentType(APPLICATION_JSON)
+                        .content(PatternJson.withSteps("\"title\": \"Chat\", \"visibility\": \"SECRET\",",
+                                PatternJson.VALID_STEPS)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("visibility"));
     }
 
     @Test

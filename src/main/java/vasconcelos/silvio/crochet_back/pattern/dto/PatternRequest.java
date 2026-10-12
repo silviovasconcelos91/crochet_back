@@ -8,6 +8,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
+import vasconcelos.silvio.crochet_back.pattern.Visibility;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -18,5 +20,6 @@ public record PatternRequest(
         @Size(max = 200) @NoNulCharacter String yarn,
         @Size(max = 500) @NoNulCharacter String sourceUrl,
         @Size(max = 500) @NoNulCharacter String imageUrl,
-        @NotEmpty List<@NotNull @Valid StepRequest> steps) {
+        @NotEmpty List<@NotNull @Valid StepRequest> steps,
+        Visibility visibility) {
 }

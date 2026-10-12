@@ -25,7 +25,8 @@ class PatternMapperTest {
                             new RowRequest("1", "6ms (6)"),
                             new RowRequest("2", "6aug (12)"))),
                     new StepRequest("Corps", List.of(
-                            new RowRequest("1-5", "12ms (12)")))));
+                            new RowRequest("1-5", "12ms (12)")))),
+            null);
 
     @Test
     void toEntityCopiesFieldsAndAssignsPositionsFromListOrder() {
@@ -65,7 +66,7 @@ class PatternMapperTest {
     void applyFieldsOverwritesTopLevelFieldsOnly() {
         Pattern pattern = mapper.toEntity(request);
         PatternRequest update = new PatternRequest(
-                "Chat v2", null, null, null, null, null, List.of());
+                "Chat v2", null, null, null, null, null, List.of(), null);
 
         mapper.applyFields(update, pattern);
 
@@ -76,6 +77,16 @@ class PatternMapperTest {
         assertThat(pattern.getSourceUrl()).isNull();
         assertThat(pattern.getImageUrl()).isNull();
         assertThat(pattern.getSteps()).hasSize(2);
+    }
+
+    @Test
+    void applyFieldsDefaultsVisibilityToPrivate() {
+        Pattern pattern = mapper.toEntity(request);
+        pattern.setVisibility(Visibility.PUBLIC);
+
+        mapper.applyFields(new PatternRequest("Chat", null, null, null, null, null, List.of(), null), pattern);
+
+        assertThat(pattern.getVisibility()).isEqualTo(Visibility.PRIVATE);
     }
 
     @Test

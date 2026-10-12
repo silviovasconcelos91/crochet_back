@@ -44,6 +44,14 @@ class SchemaMigrationTests {
     }
 
     @Test
+    void patternVisibilityIsConstrained() {
+        String check = jdbc.queryForObject("""
+                select pg_get_constraintdef(oid) from pg_constraint where conname = 'ck_pattern_visibility'
+                """, String.class);
+        assertThat(check).contains("PRIVATE").contains("PUBLIC");
+    }
+
+    @Test
     void usernameKeyIsUnique() {
         TestDatabase.reset(jdbc); // other classes sharing this context commit rows
         jdbc.update("insert into account (email, password_hash, created_at, username, username_key) "

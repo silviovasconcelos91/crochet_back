@@ -12,6 +12,7 @@ public record PatternSummaryRow(
         String yarn,
         String imageUrl,
         Integer stepCount,
+        Visibility visibility,
         ProgressStatus status,
         Integer stepPosition,
         Integer rowPosition,

@@ -1,5 +1,7 @@
 package vasconcelos.silvio.crochet_back.pattern.dto;
 
+import vasconcelos.silvio.crochet_back.pattern.Visibility;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -15,5 +17,6 @@ public record PatternResponse(
         Instant createdAt,
         Instant updatedAt,
         List<StepResponse> steps,
-        ProgressResponse progress) {
+        ProgressResponse progress,
+        Visibility visibility) {
 }
