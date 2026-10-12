@@ -13,6 +13,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Throttles password checks: per email and client address (against guessing one account's password),
@@ -46,12 +47,54 @@ public class LoginAttempts {
     }
 
     /**
+     * Runs a login password check under both email quotas. {@code wrongPassword} keeps the attempt
+     * counted, success gives the email its whole quota back, and any other error (a server fault)
+     * gives the attempt back so that outages lock nobody out.
+     */
+    public <T> T checkLogin(
+            String email, String ip, Class<? extends RuntimeException> wrongPassword, Supplier<T> check) {
+        acquireForEmail(email, ip);
+        return run(email, ip, wrongPassword, check, () -> releaseForEmail(email, ip));
+    }
+
+    /**
+     * Runs a password check made from a logged-in session (change password, delete account) under
+     * the email and client quota only: it defends against a stolen session guessing the password,
+     * and the overall ceiling, which attackers can fill from a few addresses, must not keep the
+     * owner from securing their account.
+     */
+    public void checkFromSession(
+            String email, String ip, Class<? extends RuntimeException> wrongPassword, Runnable check) {
+        String pair = pairKey(email, ip);
+        attemptsByEmailAndClient.acquire(pair);
+        run(email, ip, wrongPassword, () -> {
+            check.run();
+            return null;
+        }, () -> attemptsByEmailAndClient.release(pair));
+    }
+
+    private <T> T run(String email, String ip, Class<? extends RuntimeException> wrongPassword,
+                      Supplier<T> check, Runnable giveBack) {
+        T result;
+        try {
+            result = check.get();
+        } catch (RuntimeException ex) {
+            if (!wrongPassword.isInstance(ex)) {
+                giveBack.run();
+            }
+            throw ex;
+        }
+        recordSuccess(email, ip);
+        return result;
+    }
+
+    /**
      * Counts one password check for {@code email} from {@code ip} before the password is verified,
      * refused once either quota is used. Reserving up front (rather than recording failures
      * afterwards) keeps parallel attempts from all slipping through while the first ones are still
      * being hashed. An attempt the client quota refuses gives its overall reservation back.
      */
-    public void acquireForEmail(String email, String ip) {
+    void acquireForEmail(String email, String ip) {
         attemptsByEmail.acquire(email);
         try {
             attemptsByEmailAndClient.acquire(pairKey(email, ip));
@@ -61,8 +104,13 @@ public class LoginAttempts {
         }
     }
 
+    private void releaseForEmail(String email, String ip) {
+        attemptsByEmailAndClient.release(pairKey(email, ip));
+        attemptsByEmail.release(email);
+    }
+
     /** A successful check gives the email its whole quota back. */
-    public void recordSuccess(String email, String ip) {
+    void recordSuccess(String email, String ip) {
         attemptsByEmailAndClient.reset(pairKey(email, ip));
         attemptsByEmail.reset(email);
     }

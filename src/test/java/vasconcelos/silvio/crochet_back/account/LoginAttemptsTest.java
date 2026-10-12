@@ -116,6 +116,67 @@ class LoginAttemptsTest {
     }
 
     @Test
+    void wrongPasswordKeepsTheAttemptCounted() {
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> attempts.checkLogin(EMAIL, IP, WrongPassword.class, () -> {
+                throw new WrongPassword();
+            })).isInstanceOf(WrongPassword.class);
+        }
+
+        assertThatThrownBy(() -> attempts.checkLogin(EMAIL, IP, WrongPassword.class, () -> "ok"))
+                .isInstanceOf(TooManyAttemptsException.class);
+    }
+
+    @Test
+    void serverFaultGivesTheAttemptBack() {
+        for (int i = 0; i < 6; i++) {
+            assertThatThrownBy(() -> attempts.checkLogin(EMAIL, IP, WrongPassword.class, () -> {
+                throw new IllegalStateException("database is down");
+            })).isInstanceOf(IllegalStateException.class);
+        }
+
+        assertThat(attempts.checkLogin(EMAIL, IP, WrongPassword.class, () -> "ok")).isEqualTo("ok");
+    }
+
+    @Test
+    void successfulCheckGivesTheWholeQuotaBack() {
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+
+        attempts.checkLogin(EMAIL, IP, WrongPassword.class, () -> "ok");
+
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+        assertThatCode(() -> attempts.acquireForEmail(EMAIL, IP)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void checksFromASessionIgnoreTheOverallCeiling() {
+        for (int i = 1; i <= 5; i++) {
+            attempts.acquireForEmail(EMAIL, "198.51.100." + i);
+        }
+        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL, IP)).isInstanceOf(TooManyAttemptsException.class);
+
+        assertThatCode(() -> attempts.checkFromSession(EMAIL, IP, WrongPassword.class, () -> { }))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void checksFromASessionStillHaveTheClientQuota() {
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> attempts.checkFromSession(EMAIL, IP, WrongPassword.class, () -> {
+                throw new WrongPassword();
+            })).isInstanceOf(WrongPassword.class);
+        }
+
+        assertThatThrownBy(() -> attempts.checkFromSession(EMAIL, IP, WrongPassword.class, () -> { }))
+                .isInstanceOf(TooManyAttemptsException.class);
+    }
+
+    static final class WrongPassword extends RuntimeException {
+    }
+
+    @Test
     void retryAfterCountsDownFromTheFirstAttempt() {
         attempts.acquireForEmail(EMAIL, IP);
         clock.advance(Duration.ofMinutes(10));

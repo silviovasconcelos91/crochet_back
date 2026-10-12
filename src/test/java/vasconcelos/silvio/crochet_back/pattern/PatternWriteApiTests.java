@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.context.WebApplicationContext;
 import vasconcelos.silvio.crochet_back.account.AccountRepository;
@@ -16,6 +17,12 @@ import vasconcelos.silvio.crochet_back.support.TestDatabase;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -159,6 +166,35 @@ class PatternWriteApiTests {
         assertThat(count("pattern")).isZero();
         assertThat(count("step")).isZero();
         assertThat(count("pattern_row")).isZero();
+    }
+
+    @Test
+    void concurrentDeleteAndWritesNeverFail() throws Exception {
+        for (int round = 0; round < 10; round++) {
+            String location = create(mvc, CHAT);
+            mvc.perform(put(location + "/progress").contentType(APPLICATION_JSON)
+                            .content("{ \"status\": \"IN_PROGRESS\", \"stepIndex\": 0, \"rowIndex\": 0 }"))
+                    .andExpect(status().isOk());
+            List<MockHttpServletRequestBuilder> requests = List.of(
+                    delete(location),
+                    put(location).contentType(APPLICATION_JSON).content(ONE_STEP),
+                    delete(location + "/progress"));
+            CountDownLatch start = new CountDownLatch(1);
+            try (ExecutorService pool = Executors.newFixedThreadPool(requests.size())) {
+                List<Future<Integer>> statuses = new ArrayList<>();
+                for (MockHttpServletRequestBuilder request : requests) {
+                    statuses.add(pool.submit(() -> {
+                        start.await();
+                        return mvc.perform(request).andReturn().getResponse().getStatus();
+                    }));
+                }
+                start.countDown();
+                for (Future<Integer> status : statuses) {
+                    // each request either wins or finds the pattern already gone
+                    assertThat(status.get()).isIn(200, 204, 404);
+                }
+            }
+        }
     }
 
     @Test

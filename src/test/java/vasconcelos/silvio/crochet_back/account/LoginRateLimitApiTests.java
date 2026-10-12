@@ -139,6 +139,23 @@ class LoginRateLimitApiTests {
     }
 
     @Test
+    void ownerCanStillChangePasswordWhileLoginIsLockedForEveryone() throws Exception {
+        Browser owner = new Browser(mvc).fetchCsrf();
+        owner.perform(from("203.0.113.60", post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(credentials("assiege@exemple.fr", PASSWORD))))
+                .andExpect(status().isCreated());
+        for (int i = 1; i <= 3; i++) {
+            send("/api/auth/login", "203.0.113.6" + i, "assiege@exemple.fr", "mauvais").andExpect(status().isUnauthorized());
+        }
+        send("/api/auth/login", "203.0.113.64", "assiege@exemple.fr", PASSWORD).andExpect(status().isTooManyRequests());
+
+        owner.perform(from("203.0.113.60", put("/api/me/password").contentType(APPLICATION_JSON)
+                        .content("{ \"currentPassword\": \"%s\", \"newPassword\": \"nouveau-secret\" }"
+                                .formatted(PASSWORD))))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void passwordChecksOfTheAccountEndpointsAreThrottled() throws Exception {
         String ip = "203.0.113.51";
         Browser browser = new Browser(mvc).fetchCsrf();

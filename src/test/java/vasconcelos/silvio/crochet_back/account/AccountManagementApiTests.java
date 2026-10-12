@@ -8,7 +8,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 import vasconcelos.silvio.crochet_back.support.Browser;
@@ -46,7 +45,7 @@ class AccountManagementApiTests {
     AccountSessions accountSessions;
 
     @Autowired
-    PlatformTransactionManager transactionManager;
+    TransactionTemplate transactionTemplate;
 
     @BeforeEach
     void resetDatabase() {
@@ -138,7 +137,7 @@ class AccountManagementApiTests {
         registered();
         loggedIn(PASSWORD);
 
-        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+        transactionTemplate.executeWithoutResult(status -> {
             accountSessions.invalidateAllExcept(EMAIL, "none");
             status.setRollbackOnly();
         });

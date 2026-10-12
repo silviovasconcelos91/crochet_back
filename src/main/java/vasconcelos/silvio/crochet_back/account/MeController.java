@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import vasconcelos.silvio.crochet_back.account.dto.AccountResponse;
 import vasconcelos.silvio.crochet_back.account.dto.ChangePasswordRequest;
 import vasconcelos.silvio.crochet_back.account.dto.DeleteAccountRequest;
+import vasconcelos.silvio.crochet_back.config.InvalidFieldException;
 
 @RestController
 @RequestMapping("/api/me")
@@ -38,11 +39,11 @@ public class MeController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody ChangePasswordRequest body,
             HttpServletRequest request) {
-        // throttled like a login: a stolen session must not become a way to guess the password
-        loginAttempts.acquireForEmail(principal.getUsername(), request.getRemoteAddr());
-        accountService.changePassword(
-                principal.id(), body.currentPassword(), body.newPassword(), request.getSession().getId());
-        loginAttempts.recordSuccess(principal.getUsername(), request.getRemoteAddr());
+        // throttled: a stolen session must not become a way to guess the password
+        String sessionId = request.getSession().getId();
+        loginAttempts.checkFromSession(principal.getUsername(), request.getRemoteAddr(), InvalidFieldException.class,
+                () -> accountService.changePassword(
+                        principal.id(), body.currentPassword(), body.newPassword(), sessionId));
     }
 
     @DeleteMapping
@@ -51,9 +52,8 @@ public class MeController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody DeleteAccountRequest body,
             HttpServletRequest request) {
-        loginAttempts.acquireForEmail(principal.getUsername(), request.getRemoteAddr());
-        accountService.delete(principal.id(), body.password());
-        loginAttempts.recordSuccess(principal.getUsername(), request.getRemoteAddr());
+        loginAttempts.checkFromSession(principal.getUsername(), request.getRemoteAddr(), InvalidFieldException.class,
+                () -> accountService.delete(principal.id(), body.password()));
         HttpSession current = request.getSession();
         accountSessions.invalidateAllExcept(principal.getUsername(), current.getId());
         // The current session is invalidated through the request so that Spring Session does not

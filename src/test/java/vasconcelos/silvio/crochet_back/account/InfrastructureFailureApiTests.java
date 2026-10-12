@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static vasconcelos.silvio.crochet_back.support.TestAccounts.PASSWORD;
 
 /** What the API does when the database fails in the middle of an authentication flow. */
-@SpringBootTest
+@SpringBootTest(properties = "crochet.login-limit.max-failures-per-email-and-client=2")
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @ExtendWith(OutputCaptureExtension.class)
@@ -95,6 +95,25 @@ class InfrastructureFailureApiTests {
                 .andExpect(jsonPath("$.detail").value("Internal error"));
 
         assertThat(output).contains("database is down");
+    }
+
+    @Test
+    void serverFaultsDoNotUseTheLoginQuota() throws Exception {
+        registered();
+        doThrow(new DataAccessResourceFailureException("database is down"))
+                .doThrow(new DataAccessResourceFailureException("database is down"))
+                .doThrow(new DataAccessResourceFailureException("database is down"))
+                .doCallRealMethod()
+                .when(userDetailsService).loadUserByUsername(any());
+        for (int i = 0; i < 3; i++) {
+            new Browser(mvc).fetchCsrf()
+                    .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials(PASSWORD)))
+                    .andExpect(status().isInternalServerError());
+        }
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials(PASSWORD)))
+                .andExpect(status().isOk());
     }
 
     @Test

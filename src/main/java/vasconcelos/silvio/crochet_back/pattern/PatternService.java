@@ -52,7 +52,8 @@ public class PatternService {
 
     @Transactional
     public void delete(long ownerId, long id) {
-        repository.delete(find(ownerId, id));
+        // locked like every other write to the pattern, so concurrent writes wait instead of deadlocking
+        repository.delete(findForUpdate(ownerId, id));
     }
 
     /**
