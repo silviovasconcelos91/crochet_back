@@ -80,7 +80,15 @@ class AuthApiTests {
     }
 
     @Test
-    void sessionIsStoredInDatabaseWithHttpOnlyLaxCookie() throws Exception {
+    void csrfCookieIsSecureByDefault() throws Exception {
+        MvcResult result = mvc.perform(get("/api/auth/csrf")).andExpect(status().isNoContent()).andReturn();
+
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+                .anySatisfy(header -> assertThat(header).startsWith("XSRF-TOKEN=").contains("Secure"));
+    }
+
+    @Test
+    void sessionIsStoredInDatabaseWithHttpOnlyLaxSecureCookie() throws Exception {
         Browser browser = new Browser(mvc).fetchCsrf();
 
         MvcResult result = browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
@@ -92,6 +100,7 @@ class AuthApiTests {
                 .anySatisfy(header -> assertThat(header)
                         .startsWith("SESSION=")
                         .contains("HttpOnly")
+                        .contains("Secure")
                         .contains("SameSite=Lax"));
         Integer stored = jdbc.queryForObject(
                 "select count(*) from spring_session where principal_name = 'moi@exemple.fr'", Integer.class);

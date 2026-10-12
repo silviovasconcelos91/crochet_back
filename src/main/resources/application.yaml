@@ -23,9 +23,13 @@ crochet:
       - http://localhost:5173
 
 server:
+  # behind a TLS-terminating reverse proxy: trust its X-Forwarded-* headers (only from private
+  # network addresses) for the client IP and scheme
+  forward-headers-strategy: native
   servlet:
     session:
       cookie:
         http-only: true
         same-site: lax
-        secure: ${SESSION_COOKIE_SECURE:false}
+        # also applied to the XSRF-TOKEN cookie; set SESSION_COOKIE_SECURE=false for local HTTP
+        secure: ${SESSION_COOKIE_SECURE:true}

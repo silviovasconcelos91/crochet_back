@@ -1,6 +1,7 @@
 package vasconcelos.silvio.crochet_back.config;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.web.server.autoconfigure.ServerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -60,9 +61,18 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * The XSRF-TOKEN cookie follows the session cookie's Secure flag; by default it would follow
+     * request.isSecure(), which is false behind a TLS-terminating proxy that sends no X-Forwarded-Proto.
+     */
     @Bean
-    CsrfTokenRepository csrfTokenRepository() {
-        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    CsrfTokenRepository csrfTokenRepository(ServerProperties serverProperties) {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        Boolean secure = serverProperties.getServlet().getSession().getCookie().getSecure();
+        if (secure != null) {
+            repository.setCookieCustomizer(cookie -> cookie.secure(secure));
+        }
+        return repository;
     }
 
     /**
