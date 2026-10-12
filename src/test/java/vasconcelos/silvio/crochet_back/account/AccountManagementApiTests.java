@@ -8,6 +8,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 import vasconcelos.silvio.crochet_back.support.Browser;
 import vasconcelos.silvio.crochet_back.support.TestDatabase;
@@ -19,8 +21,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static vasconcelos.silvio.crochet_back.support.TestAccounts.PASSWORD;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -28,7 +32,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AccountManagementApiTests {
 
     static final String EMAIL = "moi@exemple.fr";
-    static final String PASSWORD = "motdepasse-secret";
     static final String NEW_PASSWORD = "nouveau-secret";
     static final String PATTERN = """
             { "title": "Chat", "steps": [ { "title": "Tête", "rows": [ { "number": "1", "value": "6ms" } ] } ] }""";
@@ -38,6 +41,12 @@ class AccountManagementApiTests {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    AccountSessions accountSessions;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void resetDatabase() {
@@ -94,6 +103,7 @@ class AccountManagementApiTests {
                         .content(passwordChange("mauvais-mot-de-passe", NEW_PASSWORD)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItem("currentPassword")));
+        browser.perform(get("/api/me")).andExpect(status().isOk());
 
         loggedIn(PASSWORD);
     }
@@ -106,6 +116,8 @@ class AccountManagementApiTests {
                         .content(passwordChange(PASSWORD, "court")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItem("newPassword")));
+        browser.perform(get("/api/me")).andExpect(status().isOk());
+        loggedIn(PASSWORD);
     }
 
     @Test
@@ -122,6 +134,19 @@ class AccountManagementApiTests {
     }
 
     @Test
+    void endingOtherSessionsTakesPartInTheCallersTransaction() throws Exception {
+        registered();
+        loggedIn(PASSWORD);
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            accountSessions.invalidateAllExcept(EMAIL, "none");
+            status.setRollbackOnly();
+        });
+
+        assertThat(count("spring_session")).isEqualTo(2);
+    }
+
+    @Test
     void deleteAccountWithWrongPasswordIsBadRequest() throws Exception {
         Browser browser = registered();
 
@@ -129,6 +154,7 @@ class AccountManagementApiTests {
                         .content("{ \"password\": \"mauvais-mot-de-passe\" }"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItem("password")));
+        browser.perform(get("/api/me")).andExpect(status().isOk());
 
         assertThat(count("account")).isEqualTo(1);
     }
@@ -146,7 +172,9 @@ class AccountManagementApiTests {
 
         browser.perform(delete("/api/me").contentType(APPLICATION_JSON)
                         .content("{ \"password\": \"%s\" }".formatted(PASSWORD)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isNoContent())
+                // the browser is told to drop its session cookie
+                .andExpect(cookie().maxAge("SESSION", 0));
 
         browser.perform(get("/api/me")).andExpect(status().isUnauthorized());
         other.perform(get("/api/me")).andExpect(status().isUnauthorized());

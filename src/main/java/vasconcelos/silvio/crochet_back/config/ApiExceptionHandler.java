@@ -1,10 +1,13 @@
 package vasconcelos.silvio.crochet_back.config;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
@@ -14,11 +17,14 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 import vasconcelos.silvio.crochet_back.account.EmailAlreadyUsedException;
 import vasconcelos.silvio.crochet_back.account.TooManyAttemptsException;
 import vasconcelos.silvio.crochet_back.pattern.PatternNotFoundException;
 import vasconcelos.silvio.crochet_back.pattern.ProgressNotFoundException;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -46,8 +52,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Internal error");
     }
 
+    /** A session that reaches here is useless (e.g. its account was deleted): it is ended, not kept until idle timeout. */
     @ExceptionHandler(AuthenticationException.class)
-    ProblemDetail handleUnauthenticated() {
+    ProblemDetail handleUnauthenticated(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Authentication required");
     }
 
@@ -77,6 +88,40 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                         "message", String.valueOf(error.getDefaultMessage())))
                 .toList();
         return handleExceptionInternal(ex, validationProblem(errors), headers, status, request);
+    }
+
+    /** A value of the wrong type or outside an enum names its field, like a validation error. */
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        if (ex.getCause() instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+            Map<String, String> error = Map.of(
+                    "field", fieldPath(mismatch.getPath()),
+                    "message", mismatchMessage(mismatch));
+            return handleExceptionInternal(ex, validationProblem(List.of(error)), headers, status, request);
+        }
+        return super.handleHttpMessageNotReadable(ex, headers, status, request);
+    }
+
+    /** Same notation as Bean Validation field paths, e.g. {@code steps[0].rows[1].value}. */
+    private static String fieldPath(List<JacksonException.Reference> path) {
+        StringBuilder field = new StringBuilder();
+        for (JacksonException.Reference reference : path) {
+            if (reference.getPropertyName() != null) {
+                field.append(field.isEmpty() ? "" : ".").append(reference.getPropertyName());
+            } else {
+                field.append('[').append(reference.getIndex()).append(']');
+            }
+        }
+        return field.toString();
+    }
+
+    private static String mismatchMessage(MismatchedInputException ex) {
+        Class<?> target = ex.getTargetType();
+        if (target != null && target.isEnum()) {
+            return "must be one of " + Arrays.toString(target.getEnumConstants());
+        }
+        return "has an invalid value";
     }
 
     @ExceptionHandler(ProgressNotFoundException.class)

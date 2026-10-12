@@ -11,6 +11,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
@@ -21,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,6 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static vasconcelos.silvio.crochet_back.support.TestAccounts.PASSWORD;
 
 /** What the API does when the database fails in the middle of an authentication flow. */
 @SpringBootTest
@@ -37,7 +41,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InfrastructureFailureApiTests {
 
     static final String EMAIL = "moi@exemple.fr";
-    static final String PASSWORD = "motdepasse-secret";
 
     @Autowired
     MockMvc mvc;
@@ -50,6 +53,9 @@ class InfrastructureFailureApiTests {
 
     @MockitoSpyBean
     AccountSessions accountSessions;
+
+    @MockitoSpyBean
+    PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void resetDatabase() {
@@ -66,6 +72,14 @@ class InfrastructureFailureApiTests {
         browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(credentials(PASSWORD)))
                 .andExpect(status().isCreated());
         return browser;
+    }
+
+    @Test
+    void registerHashesThePasswordOnlyOnce() throws Exception {
+        registered();
+
+        verify(passwordEncoder).encode(PASSWORD);
+        verify(passwordEncoder, never()).matches(any(), any());
     }
 
     @Test

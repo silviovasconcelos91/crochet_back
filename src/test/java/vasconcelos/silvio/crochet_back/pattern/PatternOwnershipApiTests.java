@@ -7,6 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
@@ -20,6 +21,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static vasconcelos.silvio.crochet_back.pattern.PatternJson.CHAT;
@@ -43,6 +45,7 @@ class PatternOwnershipApiTests {
     JdbcTemplate jdbc;
 
     AccountPrincipal alice;
+    AccountPrincipal bob;
     MockMvc aliceMvc;
     MockMvc bobMvc;
 
@@ -51,7 +54,8 @@ class PatternOwnershipApiTests {
         TestDatabase.reset(jdbc);
         alice = TestAccounts.create(accounts, passwordEncoder, "alice@exemple.fr");
         aliceMvc = TestAccounts.mockMvcAs(context, alice);
-        bobMvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "bob@exemple.fr"));
+        bob = TestAccounts.create(accounts, passwordEncoder, "bob@exemple.fr");
+        bobMvc = TestAccounts.mockMvcAs(context, bob);
     }
 
     @Test
@@ -74,6 +78,19 @@ class PatternOwnershipApiTests {
         bobMvc.perform(get("/api/patterns"))
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].title").value("Bonnet"));
+    }
+
+    @Test
+    void otherAccountsPatternLooksExactlyLikeAMissingOne() throws Exception {
+        String location = create(aliceMvc, CHAT);
+        String id = location.substring(location.lastIndexOf('/') + 1);
+        String missingId = String.valueOf(Long.parseLong(id) + 1000);
+        String missing = bobMvc.perform(get("/api/patterns/" + missingId)).andExpect(status().isNotFound())
+                .andReturn().getResponse().getContentAsString();
+
+        bobMvc.perform(get(location))
+                .andExpect(status().isNotFound())
+                .andExpect(content().json(missing.replace(missingId, id), JsonCompareMode.STRICT));
     }
 
     @Test

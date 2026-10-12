@@ -20,9 +20,16 @@ import vasconcelos.silvio.crochet_back.support.TestAccounts;
 import vasconcelos.silvio.crochet_back.support.TestDatabase;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -142,7 +149,9 @@ class ProgressApiTests {
                 Arguments.of(progress("IN_PROGRESS", 0, -1), "rowIndex"),
                 Arguments.of(progress(null, 0, 0), "status"),
                 Arguments.of(progress("IN_PROGRESS", "null", 0), "stepIndex"),
-                Arguments.of(progress("IN_PROGRESS", 0, "null"), "rowIndex"));
+                Arguments.of(progress("IN_PROGRESS", 0, "null"), "rowIndex"),
+                Arguments.of(progress("IN_PROGRESS", "\"deux\"", 0), "stepIndex"),
+                Arguments.of(progress("PAUSED", 0, 0), "status"));
     }
 
     @ParameterizedTest
@@ -157,10 +166,35 @@ class ProgressApiTests {
     }
 
     @Test
-    void unknownStatusIsBadRequest() throws Exception {
+    void unknownStatusNamesTheAcceptedValues() throws Exception {
         putProgress(mvc, progress("PAUSED", 0, 0))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON));
+                .andExpect(jsonPath("$.errors[0].field").value("status"))
+                .andExpect(jsonPath("$.errors[0].message").value(containsString("IN_PROGRESS")));
+    }
+
+    @Test
+    void concurrentFirstUpdatesAllSucceed() throws Exception {
+        int rounds = 10;
+        for (int round = 0; round < rounds; round++) {
+            String target = create(mvc, CHAT) + "/progress";
+            CountDownLatch start = new CountDownLatch(1);
+            try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+                List<Future<Integer>> statuses = new ArrayList<>();
+                for (int client = 0; client < 2; client++) {
+                    statuses.add(pool.submit(() -> {
+                        start.await();
+                        return mvc.perform(put(target).contentType(APPLICATION_JSON)
+                                        .content(progress("IN_PROGRESS", 0, 1)))
+                                .andReturn().getResponse().getStatus();
+                    }));
+                }
+                start.countDown();
+                for (Future<Integer> status : statuses) {
+                    assertThat(status.get()).isEqualTo(200);
+                }
+            }
+        }
     }
 
     @Test
@@ -215,6 +249,18 @@ class ProgressApiTests {
     }
 
     @Test
+    void summaryCarriesEveryProgressField() throws Exception {
+        String finished = putProgressOk(progress("FINISHED", 1, 0));
+
+        String summary = mvc.perform(get("/api/patterns")).andReturn().getResponse().getContentAsString();
+
+        assertThat((String) JsonPath.read(summary, "$[0].progress.status")).isEqualTo("FINISHED");
+        assertThat(instant(summary, "$[0].progress.startedAt")).isEqualTo(instant(finished, "$.startedAt"));
+        assertThat(instant(summary, "$[0].progress.updatedAt")).isEqualTo(instant(finished, "$.updatedAt"));
+        assertThat(instant(summary, "$[0].progress.finishedAt")).isEqualTo(instant(finished, "$.finishedAt"));
+    }
+
+    @Test
     void replacingPatternClampsRowIntoNewStructure() throws Exception {
         putProgressOk(progress("IN_PROGRESS", 0, 2)); // third row of "Tête"
 
@@ -237,6 +283,9 @@ class ProgressApiTests {
         assertThat((Integer) JsonPath.read(detail, "$.progress.rowIndex")).isEqualTo(0);
         assertThat((String) JsonPath.read(detail, "$.progress.status")).isEqualTo("FINISHED");
         assertThat(instant(detail, "$.progress.startedAt")).isEqualTo(instant(finished, "$.startedAt"));
+        // clamping is not the user moving: updatedAt and finishedAt stay as they were
+        assertThat(instant(detail, "$.progress.updatedAt")).isEqualTo(instant(finished, "$.updatedAt"));
+        assertThat(instant(detail, "$.progress.finishedAt")).isEqualTo(instant(finished, "$.finishedAt"));
     }
 
     @Test

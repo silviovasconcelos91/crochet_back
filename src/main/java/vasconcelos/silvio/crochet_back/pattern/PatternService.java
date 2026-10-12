@@ -34,7 +34,8 @@ public class PatternService {
 
     @Transactional
     public PatternResponse replace(long ownerId, long id, PatternRequest request) {
-        Pattern pattern = find(ownerId, id);
+        // locked: the progress is clamped against the new steps and must not move meanwhile
+        Pattern pattern = findForUpdate(ownerId, id);
         mapper.applyFields(request, pattern);
         // Hibernate flushes inserts before orphan deletes; removing old steps first avoids
         // violating UNIQUE(pattern_id, position) when new steps reuse the same positions.
@@ -60,5 +61,11 @@ public class PatternService {
      */
     public Pattern find(long ownerId, long id) {
         return repository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new PatternNotFoundException(id));
+    }
+
+    /** {@link #find} for a write to the pattern's progress: the row stays locked until commit. */
+    public Pattern findForUpdate(long ownerId, long id) {
+        return repository.findByIdAndOwnerIdForUpdate(id, ownerId)
+                .orElseThrow(() -> new PatternNotFoundException(id));
     }
 }

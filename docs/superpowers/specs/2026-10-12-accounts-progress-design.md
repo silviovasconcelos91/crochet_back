@@ -165,7 +165,7 @@ Sémantique :
   `Content-Type` et `X-XSRF-TOKEN`, `Location` exposé, `allowCredentials(true)`.
 - **Cookie de session** : HttpOnly, `SameSite=Lax`, `Secure` piloté par
   `server.servlet.session.cookie.secure` (faux par défaut en dev).
-- **Expiration d'inactivité** : 7 jours (`server.servlet.session.timeout: 7d`).
+- **Expiration d'inactivité** : 7 jours (`spring.session.timeout: 7d`, la propriété que lit Spring Session).
 - **Spring Session JDBC** : sessions dans Postgres ; l'index par nom de principal sert à invalider
   les autres sessions lors d'un changement de mot de passe.
 - 401 (non authentifié) et 403 (CSRF manquant/invalide) renvoyés en `ProblemDetail`.

@@ -3,8 +3,19 @@
 # limits; LoginRateLimitApiTests sets its own low limits.
 crochet:
   login-limit:
+    max-failures-per-email-and-client: 1000
     max-failures-per-email: 1000
     max-requests-per-ip: 100000
+
+# lets repository tests count the SQL statements a load issues
+spring:
+  jpa:
+    properties:
+      hibernate:
+        generate_statistics: true
+logging:
+  level:
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: warn
 
 # pinned to the shipped default so the cookie tests do not depend on a local SESSION_COOKIE_SECURE
 server:

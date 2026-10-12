@@ -25,6 +25,7 @@ public class MeController {
 
     private final AccountService accountService;
     private final AccountSessions accountSessions;
+    private final LoginAttempts loginAttempts;
 
     @GetMapping
     public AccountResponse me(@AuthenticationPrincipal AccountPrincipal principal) {
@@ -37,8 +38,11 @@ public class MeController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody ChangePasswordRequest body,
             HttpServletRequest request) {
+        // throttled like a login: a stolen session must not become a way to guess the password
+        loginAttempts.acquireForEmail(principal.getUsername(), request.getRemoteAddr());
         accountService.changePassword(
                 principal.id(), body.currentPassword(), body.newPassword(), request.getSession().getId());
+        loginAttempts.recordSuccess(principal.getUsername(), request.getRemoteAddr());
     }
 
     @DeleteMapping
@@ -47,7 +51,9 @@ public class MeController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody DeleteAccountRequest body,
             HttpServletRequest request) {
+        loginAttempts.acquireForEmail(principal.getUsername(), request.getRemoteAddr());
         accountService.delete(principal.id(), body.password());
+        loginAttempts.recordSuccess(principal.getUsername(), request.getRemoteAddr());
         HttpSession current = request.getSession();
         accountSessions.invalidateAllExcept(principal.getUsername(), current.getId());
         // The current session is invalidated through the request so that Spring Session does not

@@ -1,6 +1,9 @@
 package vasconcelos.silvio.crochet_back.pattern;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +31,9 @@ class PatternRepositoryTests {
 
     @Autowired
     EntityManager em;
+
+    @Autowired
+    EntityManagerFactory emf;
 
     Long ownerId;
 
@@ -100,6 +106,20 @@ class PatternRepositoryTests {
         assertThat(repository.findAllSummaries(ownerId)).extracting(PatternSummaryRow::title).containsExactly("Mien");
         assertThat(repository.findByIdAndOwnerId(mine.getId(), ownerId)).isPresent();
         assertThat(repository.findByIdAndOwnerId(theirs.getId(), ownerId)).isEmpty();
+    }
+
+    @Test
+    void findByIdAndOwnerIdLoadsTheProgressInTheSameQuery() {
+        Long id = repository.save(pattern("Chat", 1)).getId();
+        em.flush();
+        em.clear();
+        Statistics statistics = emf.unwrap(SessionFactory.class).getStatistics();
+        statistics.clear();
+
+        Pattern loaded = repository.findByIdAndOwnerId(id, ownerId).orElseThrow();
+
+        assertThat(loaded.getProgress()).isNull();
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
     }
 
     private Pattern pattern(String title, int stepCount) {

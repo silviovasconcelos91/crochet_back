@@ -1,6 +1,7 @@
 package vasconcelos.silvio.crochet_back.account;
 
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,9 +26,21 @@ public class AccountService {
         }
         try {
             return accounts.saveAndFlush(new Account(email, passwordEncoder.encode(rawPassword)));
-        } catch (DataIntegrityViolationException concurrentRegistration) {
-            throw new EmailAlreadyUsedException();
+        } catch (DataIntegrityViolationException ex) {
+            if (violates(ex, "uk_account_email")) {
+                throw new EmailAlreadyUsedException(); // registered concurrently
+            }
+            throw ex;
         }
+    }
+
+    private static boolean violates(DataIntegrityViolationException ex, String constraint) {
+        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException violation) {
+                return constraint.equalsIgnoreCase(violation.getConstraintName());
+            }
+        }
+        return false;
     }
 
     /** Loads the logged-in account; a session outliving its account is treated as unauthenticated. */
@@ -37,10 +50,8 @@ public class AccountService {
     }
 
     /**
-     * Ends every other session of the account inside the password transaction. Spring Session deletes
-     * them in its own (REQUIRES_NEW) transaction: if that fails, the new password rolls back; if the
-     * password commit fails afterwards, the sessions are gone but the old password stays. Either way no
-     * other session survives a password that was actually changed.
+     * Ends every other session of the account in the same transaction as the new password (see
+     * SessionTransactionConfig): both are committed together or not at all.
      */
     @Transactional
     public void changePassword(long id, String currentPassword, String newPassword, String keptSessionId) {
@@ -49,7 +60,6 @@ public class AccountService {
             throw new InvalidFieldException("currentPassword", "is incorrect");
         }
         account.setPasswordHash(passwordEncoder.encode(newPassword));
-        accounts.flush();
         accountSessions.invalidateAllExcept(account.getEmail(), keptSessionId);
     }
 

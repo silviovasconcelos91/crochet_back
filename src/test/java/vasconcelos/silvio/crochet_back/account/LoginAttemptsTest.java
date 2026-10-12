@@ -24,18 +24,18 @@ class LoginAttemptsTest {
 
     final MutableClock clock = new MutableClock();
     final LoginAttempts attempts = new LoginAttempts(
-            new LoginLimitProperties(3, Duration.ofMinutes(15), 2, Duration.ofMinutes(1)), clock);
+            new LoginLimitProperties(3, 5, Duration.ofMinutes(15), 2, Duration.ofMinutes(1)), clock);
 
     @Test
-    void emailIsRefusedOnceItsAttemptsReachTheLimit() {
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
+    void emailIsRefusedForAClientOnceItsAttemptsReachTheLimit() {
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
 
-        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL))
+        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL, IP))
                 .isInstanceOfSatisfying(TooManyAttemptsException.class,
                         ex -> assertThat(ex.getRetryAfter()).isEqualTo(Duration.ofMinutes(15)));
-        assertThatCode(() -> attempts.acquireForEmail("autre@exemple.fr")).doesNotThrowAnyException();
+        assertThatCode(() -> attempts.acquireForEmail("autre@exemple.fr", IP)).doesNotThrowAnyException();
     }
 
     @Test
@@ -49,7 +49,7 @@ class LoginAttemptsTest {
                 futures[i] = pool.submit(() -> {
                     start.await();
                     try {
-                        attempts.acquireForEmail(EMAIL);
+                        attempts.acquireForEmail(EMAIL, IP);
                         granted.incrementAndGet();
                     } catch (TooManyAttemptsException refused) {
                         // expected for all but three
@@ -67,38 +67,87 @@ class LoginAttemptsTest {
     }
 
     @Test
-    void retryAfterCountsDownFromTheFirstAttempt() {
-        attempts.acquireForEmail(EMAIL);
-        clock.advance(Duration.ofMinutes(10));
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
+    void otherClientsKeepTheirOwnQuotaForTheSameEmail() {
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
 
-        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL))
+        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL, IP)).isInstanceOf(TooManyAttemptsException.class);
+        assertThatCode(() -> attempts.acquireForEmail(EMAIL, "198.51.100.1")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void emailIsRefusedForEveryClientOnceItsOverallLimitIsReached() {
+        for (int i = 1; i <= 5; i++) {
+            attempts.acquireForEmail(EMAIL, "198.51.100." + i);
+        }
+
+        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL, "198.51.100.99"))
+                .isInstanceOf(TooManyAttemptsException.class);
+    }
+
+    @Test
+    void attemptsRefusedForOneClientDoNotUseTheOverallQuota() {
+        for (int i = 0; i < 6; i++) {
+            try {
+                attempts.acquireForEmail(EMAIL, IP);
+            } catch (TooManyAttemptsException refused) {
+                // three granted, three refused
+            }
+        }
+
+        assertThatCode(() -> attempts.acquireForEmail(EMAIL, "198.51.100.1")).doesNotThrowAnyException();
+        assertThatCode(() -> attempts.acquireForEmail(EMAIL, "198.51.100.2")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL, "198.51.100.3"))
+                .isInstanceOf(TooManyAttemptsException.class);
+    }
+
+    @Test
+    void successGivesTheOverallQuotaBack() {
+        for (int i = 1; i <= 4; i++) {
+            attempts.acquireForEmail(EMAIL, "198.51.100." + i);
+        }
+
+        attempts.recordSuccess(EMAIL, IP);
+
+        for (int i = 5; i <= 9; i++) {
+            attempts.acquireForEmail(EMAIL, "198.51.100." + i);
+        }
+    }
+
+    @Test
+    void retryAfterCountsDownFromTheFirstAttempt() {
+        attempts.acquireForEmail(EMAIL, IP);
+        clock.advance(Duration.ofMinutes(10));
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+
+        assertThatThrownBy(() -> attempts.acquireForEmail(EMAIL, IP))
                 .isInstanceOfSatisfying(TooManyAttemptsException.class,
                         ex -> assertThat(ex.getRetryAfter()).isEqualTo(Duration.ofMinutes(5)));
     }
 
     @Test
     void emailIsAcceptedAgainWhenTheWindowEnds() {
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
 
         clock.advance(Duration.ofMinutes(15));
 
-        assertThatCode(() -> attempts.acquireForEmail(EMAIL)).doesNotThrowAnyException();
+        assertThatCode(() -> attempts.acquireForEmail(EMAIL, IP)).doesNotThrowAnyException();
     }
 
     @Test
     void successClearsAttempts() {
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
 
-        attempts.recordSuccess(EMAIL);
-        attempts.acquireForEmail(EMAIL);
-        attempts.acquireForEmail(EMAIL);
+        attempts.recordSuccess(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
+        attempts.acquireForEmail(EMAIL, IP);
 
-        assertThatCode(() -> attempts.acquireForEmail(EMAIL)).doesNotThrowAnyException();
+        assertThatCode(() -> attempts.acquireForEmail(EMAIL, IP)).doesNotThrowAnyException();
     }
 
     @Test

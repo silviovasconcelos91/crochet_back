@@ -19,7 +19,7 @@ public class ProgressService {
     private final PatternMapper mapper;
 
     public ProgressResponse update(long ownerId, long patternId, ProgressRequest request) {
-        Pattern pattern = patterns.find(ownerId, patternId);
+        Pattern pattern = patterns.findForUpdate(ownerId, patternId);
         List<Step> steps = pattern.getSteps();
         int stepIndex = request.stepIndex();
         int rowIndex = request.rowIndex();
@@ -36,7 +36,7 @@ public class ProgressService {
     }
 
     public void abandon(long ownerId, long patternId) {
-        Pattern pattern = patterns.find(ownerId, patternId);
+        Pattern pattern = patterns.findForUpdate(ownerId, patternId);
         if (pattern.getProgress() == null) {
             throw new ProgressNotFoundException(patternId);
         }

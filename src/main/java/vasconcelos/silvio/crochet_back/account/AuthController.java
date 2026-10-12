@@ -47,9 +47,13 @@ public class AuthController {
     public ResponseEntity<AccountResponse> register(
             @Valid @RequestBody RegisterRequest body, HttpServletRequest request, HttpServletResponse response) {
         loginAttempts.acquireForIp(request.getRemoteAddr());
-        accountService.register(body.email(), body.password());
-        AccountPrincipal principal = signIn(body.email(), body.password(), request, response);
-        return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(accountService.get(principal.id())));
+        Account account = accountService.register(body.email(), body.password());
+        // the password was just hashed: checking it again through the AuthenticationManager would
+        // only cost a second BCrypt round
+        AccountPrincipal principal = new AccountPrincipal(account.getId(), account.getEmail(), null);
+        startSession(UsernamePasswordAuthenticationToken.authenticated(
+                principal, null, principal.getAuthorities()), request, response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(account));
     }
 
     @PostMapping("/login")
@@ -58,16 +62,15 @@ public class AuthController {
         loginAttempts.acquireForIp(request.getRemoteAddr());
         // reserved before hashing, so a locked email costs no BCrypt work; unknown emails are counted
         // too, so a lock reveals nothing about which accounts exist
-        loginAttempts.acquireForEmail(body.email());
-        AccountPrincipal principal = signIn(body.email(), body.password(), request, response);
-        loginAttempts.recordSuccess(body.email());
-        return AccountResponse.from(accountService.get(principal.id()));
+        loginAttempts.acquireForEmail(body.email(), request.getRemoteAddr());
+        Authentication authentication = authenticationManager.authenticate(
+                UsernamePasswordAuthenticationToken.unauthenticated(body.email(), body.password()));
+        loginAttempts.recordSuccess(body.email(), request.getRemoteAddr());
+        startSession(authentication, request, response);
+        return AccountResponse.from(accountService.get(((AccountPrincipal) authentication.getPrincipal()).id()));
     }
 
-    private AccountPrincipal signIn(
-            String email, String password, HttpServletRequest request, HttpServletResponse response) {
-        Authentication authentication = authenticationManager.authenticate(
-                UsernamePasswordAuthenticationToken.unauthenticated(email, password));
+    private void startSession(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
         if (request.getSession(false) != null) {
             request.changeSessionId(); // session fixation protection
         }
@@ -77,6 +80,5 @@ public class AuthController {
         securityContextRepository.saveContext(context, request, response);
         // a token an attacker planted before login must not survive it
         csrfTokenRepository.saveToken(csrfTokenRepository.generateToken(request), request, response);
-        return (AccountPrincipal) authentication.getPrincipal();
     }
 }

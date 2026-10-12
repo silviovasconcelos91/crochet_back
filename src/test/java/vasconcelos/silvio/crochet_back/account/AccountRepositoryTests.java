@@ -19,6 +19,9 @@ class AccountRepositoryTests {
     @Autowired
     AccountRepository accounts;
 
+    @Autowired
+    AccountService accountService;
+
     @Test
     void savesAndFindsAccountByEmail() {
         Account saved = accounts.saveAndFlush(new Account("moi@exemple.fr", "hash"));
@@ -42,6 +45,13 @@ class AccountRepositoryTests {
     @Test
     void rejectsNonLowercaseEmail() {
         assertThatThrownBy(() -> accounts.saveAndFlush(new Account("Moi@Exemple.fr", "hash")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void registerReportsOnlyTheEmailUniqueConstraintAsAlreadyUsed() {
+        // breaks the lowercase CHECK, not the unique constraint: not an "email already used" conflict
+        assertThatThrownBy(() -> accountService.register("Moi@Exemple.fr", "motdepasse-secret"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

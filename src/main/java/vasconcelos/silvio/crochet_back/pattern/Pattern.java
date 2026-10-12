@@ -3,9 +3,9 @@ package vasconcelos.silvio.crochet_back.pattern;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
@@ -68,6 +68,10 @@ public class Pattern {
     @Setter(AccessLevel.NONE)
     private List<Step> steps = new ArrayList<>();
 
+    /**
+     * LAZY is not honored on this inverse side without bytecode enhancement, so the repository
+     * queries fetch-join it instead of paying a second select.
+     */
     @OneToOne(mappedBy = "pattern", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Setter(AccessLevel.NONE)
     private PatternProgress progress;

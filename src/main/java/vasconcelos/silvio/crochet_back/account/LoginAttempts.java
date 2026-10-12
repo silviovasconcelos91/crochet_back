@@ -15,13 +15,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Throttles authentication: login attempts per email (against password guessing on one account) and
- * requests per client address (against trying many emails). Counters live in this JVM only: they
- * reset on restart and are not shared between instances.
+ * Throttles password checks: per email and client address (against guessing one account's password),
+ * per email for all clients together (a higher ceiling against guessing from many addresses), and
+ * requests per client address (against trying many emails). Since one client only exhausts its own
+ * quota for an email, an attacker cannot lock the owner out without many addresses. Counters live in
+ * this JVM only: they reset on restart and are not shared between instances.
  */
 @Component
 public class LoginAttempts {
 
+    private final FixedWindowCounter attemptsByEmailAndClient;
     private final FixedWindowCounter attemptsByEmail;
     private final FixedWindowCounter requestsByIp;
 
@@ -31,6 +34,8 @@ public class LoginAttempts {
     }
 
     LoginAttempts(LoginLimitProperties properties, Clock clock) {
+        attemptsByEmailAndClient = new FixedWindowCounter(
+                properties.maxFailuresPerEmailAndClient(), properties.emailWindow(), clock);
         attemptsByEmail = new FixedWindowCounter(properties.maxFailuresPerEmail(), properties.emailWindow(), clock);
         requestsByIp = new FixedWindowCounter(properties.maxRequestsPerIp(), properties.ipWindow(), clock);
     }
@@ -41,17 +46,29 @@ public class LoginAttempts {
     }
 
     /**
-     * Counts one login attempt for {@code email} before its password is checked, refused once the
-     * email has used its quota. Reserving up front (rather than recording failures afterwards) keeps
-     * parallel attempts from all slipping through while the first ones are still being hashed.
+     * Counts one password check for {@code email} from {@code ip} before the password is verified,
+     * refused once either quota is used. Reserving up front (rather than recording failures
+     * afterwards) keeps parallel attempts from all slipping through while the first ones are still
+     * being hashed. An attempt the client quota refuses gives its overall reservation back.
      */
-    public void acquireForEmail(String email) {
+    public void acquireForEmail(String email, String ip) {
         attemptsByEmail.acquire(email);
+        try {
+            attemptsByEmailAndClient.acquire(pairKey(email, ip));
+        } catch (TooManyAttemptsException refused) {
+            attemptsByEmail.release(email);
+            throw refused;
+        }
     }
 
-    /** A successful login gives the email its whole quota back. */
-    public void recordSuccess(String email) {
+    /** A successful check gives the email its whole quota back. */
+    public void recordSuccess(String email, String ip) {
+        attemptsByEmailAndClient.reset(pairKey(email, ip));
         attemptsByEmail.reset(email);
+    }
+
+    private static String pairKey(String email, String ip) {
+        return clientKey(ip) + " " + email;
     }
 
     /**
@@ -112,6 +129,12 @@ public class LoginAttempts {
             if (refused[0] != null) {
                 throw new TooManyAttemptsException(Duration.between(now, refused[0].start().plus(length)));
             }
+        }
+
+        /** Gives back one hit counted by {@link #acquire} in the current window. */
+        void release(String key) {
+            windows.computeIfPresent(key, (k, current) ->
+                    current.count() <= 1 ? null : new Window(current.start(), current.count() - 1));
         }
 
         void reset(String key) {

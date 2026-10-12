@@ -19,7 +19,8 @@ spring:
 
 crochet:
   login-limit:
-    max-failures-per-email: 5
+    max-failures-per-email-and-client: 5
+    max-failures-per-email: 50
     email-window: 15m
     max-requests-per-ip: 20
     ip-window: 1m

@@ -12,12 +12,18 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 import vasconcelos.silvio.crochet_back.support.Browser;
 import vasconcelos.silvio.crochet_back.support.TestDatabase;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,24 +31,29 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static vasconcelos.silvio.crochet_back.support.TestAccounts.PASSWORD;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class AuthApiTests {
 
-    static final String PASSWORD = "motdepasse-secret";
 
     @Autowired
     MockMvc mvc;
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    FindByIndexNameSessionRepository<? extends Session> sessions;
 
     @BeforeEach
     void resetDatabase() {
@@ -279,6 +290,66 @@ class AuthApiTests {
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("Access denied"));
+    }
+
+    static Stream<Arguments> stateChangingRequests() {
+        return Stream.of(
+                Arguments.of(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(credentials("autre@exemple.fr", PASSWORD))),
+                Arguments.of(post("/api/auth/logout")),
+                Arguments.of(put("/api/me/password").contentType(APPLICATION_JSON)
+                        .content("{ \"currentPassword\": \"%s\", \"newPassword\": \"nouveau-secret\" }"
+                                .formatted(PASSWORD))),
+                Arguments.of(delete("/api/me").contentType(APPLICATION_JSON)
+                        .content("{ \"password\": \"%s\" }".formatted(PASSWORD))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("stateChangingRequests")
+    void stateChangingRequestWithoutCsrfTokenIsForbiddenEvenWithASession(MockHttpServletRequestBuilder request)
+            throws Exception {
+        Browser browser = registered("moi@exemple.fr");
+
+        mvc.perform(request.cookie(browser.cookie("SESSION"))).andExpect(status().isForbidden());
+
+        browser.perform(get("/api/me")).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select count(*) from account", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void storedSessionsKeepNoPasswordHash() throws Exception {
+        registered("inscrit@exemple.fr");
+        registered("connecte@exemple.fr");
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content(credentials("connecte@exemple.fr", PASSWORD)))
+                .andExpect(status().isOk());
+
+        for (String email : List.of("inscrit@exemple.fr", "connecte@exemple.fr")) {
+            assertThat(sessions.findByPrincipalName(email).values()).isNotEmpty().allSatisfy(session -> {
+                SecurityContext context = session.getAttribute(
+                        HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+                assertThat(((AccountPrincipal) context.getAuthentication().getPrincipal()).getPassword()).isNull();
+            });
+        }
+    }
+
+    @Test
+    void anonymousRequestStoresNoSession() throws Exception {
+        mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/auth/csrf")).andExpect(status().isNoContent());
+
+        assertThat(jdbc.queryForObject("select count(*) from spring_session", Integer.class)).isZero();
+    }
+
+    @Test
+    void sessionOutlivingItsAccountIsEnded() throws Exception {
+        Browser browser = registered("moi@exemple.fr");
+        jdbc.update("delete from account");
+
+        browser.perform(get("/api/me")).andExpect(status().isUnauthorized());
+
+        assertThat(jdbc.queryForObject("select count(*) from spring_session", Integer.class)).isZero();
     }
 
     @Test
