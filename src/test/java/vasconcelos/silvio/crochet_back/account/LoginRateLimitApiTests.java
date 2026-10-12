@@ -199,7 +199,25 @@ class LoginRateLimitApiTests {
     }
 
     @Test
-    void accountEndpointsShareTheLoginThrottleKey() throws Exception {
+    void usernameChangesCheckThePasswordUnderTheLoginThrottle() throws Exception {
+        String ip = "203.0.113.91";
+        Browser browser = new Browser(mvc).fetchCsrf();
+        browser.perform(from(ip, post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration("renomme", PASSWORD))))
+                .andExpect(status().isCreated());
+        for (int i = 0; i < 2; i++) {
+            browser.perform(from(ip, put("/api/me/username").contentType(APPLICATION_JSON)
+                            .content("{ \"username\": \"autre\", \"currentPassword\": \"mauvais\" }")))
+                    .andExpect(status().isBadRequest());
+        }
+
+        browser.perform(from(ip, put("/api/me/username").contentType(APPLICATION_JSON)
+                        .content("{ \"username\": \"autre\", \"currentPassword\": \"%s\" }".formatted(PASSWORD))))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void accountEndpointsShareTheLoginThrottleKey()throws Exception {
         String ip = "203.0.113.81";
         Browser owner = new Browser(mvc).fetchCsrf();
         owner.perform(from(ip, post("/api/auth/register").contentType(APPLICATION_JSON)

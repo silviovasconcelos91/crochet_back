@@ -36,8 +36,14 @@ public class MeController {
 
     @PutMapping("/username")
     public AccountResponse changeUsername(
-            @AuthenticationPrincipal AccountPrincipal principal, @Valid @RequestBody ChangeUsernameRequest body) {
-        return AccountResponse.from(accountService.changeUsername(principal.id(), body.username()));
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @Valid @RequestBody ChangeUsernameRequest body,
+            HttpServletRequest request) {
+        // throttled and password-checked: a stolen session must neither guess the password nor lock the owner out
+        String key = throttleKey(principal); // before the rename: the throttle key follows the username
+        loginAttempts.checkFromSession(key, request.getRemoteAddr(), InvalidFieldException.class,
+                () -> accountService.changeUsername(principal.id(), body.currentPassword(), body.username()));
+        return AccountResponse.from(accountService.get(principal.id()));
     }
 
     @PutMapping("/password")

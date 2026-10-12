@@ -192,8 +192,31 @@ class AccountManagementApiTests {
     }
 
     static String usernameChange(String username) {
+        return usernameChange(username, PASSWORD);
+    }
+
+    static String usernameChange(String username, String currentPassword) {
         return """
-                { "username": "%s" }""".formatted(username);
+                { "username": "%s", "currentPassword": "%s" }""".formatted(username, currentPassword);
+    }
+
+    @Test
+    void changeUsernameWithWrongPasswordIsBadRequestAndKeepsTheName() throws Exception {
+        Browser browser = registered();
+
+        browser.perform(put("/api/me/username").contentType(APPLICATION_JSON)
+                        .content(usernameChange("Nouveau", "mauvais")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("currentPassword"));
+        browser.perform(get("/api/me")).andExpect(status().isOk()).andExpect(jsonPath("$.username").value(USERNAME));
+    }
+
+    @Test
+    void changeUsernameWithoutPasswordIsBadRequest() throws Exception {
+        registered().perform(put("/api/me/username").contentType(APPLICATION_JSON)
+                        .content("{ \"username\": \"Nouveau\" }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("currentPassword"));
     }
 
     @Test

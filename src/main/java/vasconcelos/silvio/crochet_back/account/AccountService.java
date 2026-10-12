@@ -65,8 +65,11 @@ public class AccountService {
 
     /** {@code username} must already be normalized. The sessions survive: their principal is the id. */
     @Transactional
-    public Account changeUsername(long id, String username) {
+    public Account changeUsername(long id, String currentPassword, String username) {
         Account account = get(id);
+        if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
+            throw new InvalidFieldException("currentPassword", "is incorrect");
+        }
         String key = Usernames.key(username);
         if (!key.equals(account.getUsernameKey()) && accounts.existsByUsernameKey(key)) {
             throw new AlreadyUsedException(List.of("username"));
