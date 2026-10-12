@@ -224,6 +224,37 @@ class AuthApiTests {
     }
 
     @Test
+    void loginIssuesFreshCsrfToken() throws Exception {
+        registered("moi@exemple.fr");
+        Browser browser = new Browser(mvc).fetchCsrf();
+        Cookie before = browser.cookie("XSRF-TOKEN");
+
+        browser.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                .andExpect(status().isOk());
+
+        assertThat(browser.cookie("XSRF-TOKEN").getValue()).isNotEqualTo(before.getValue());
+        // a token captured before login no longer passes CSRF
+        mvc.perform(post("/api/auth/logout")
+                        .cookie(browser.cookie("SESSION"), browser.cookie("XSRF-TOKEN"))
+                        .header("X-XSRF-TOKEN", before.getValue()))
+                .andExpect(status().isForbidden());
+        browser.perform(get("/api/me")).andExpect(status().isOk());
+    }
+
+    @Test
+    void registerIssuesFreshCsrfToken() throws Exception {
+        Browser browser = new Browser(mvc).fetchCsrf();
+        Cookie before = browser.cookie("XSRF-TOKEN");
+
+        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                .andExpect(status().isCreated());
+
+        assertThat(browser.cookie("XSRF-TOKEN").getValue()).isNotEqualTo(before.getValue());
+    }
+
+    @Test
     void postWithoutCsrfTokenIsForbidden() throws Exception {
         mvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
                         .content(credentials("moi@exemple.fr", PASSWORD)))
