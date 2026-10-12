@@ -179,6 +179,21 @@ class PatternApiTests {
                         .formatted("1".repeat(21))), "steps[0].rows[0].number"),
                 Arguments.of(withSteps(t, """
                         [ { "title": "A", "rows": [ { "number": "1", "value": "" } ] } ]"""),
+                        "steps[0].rows[0].value"),
+                // NUL is rejected by PostgreSQL text columns; it must be a 400, not a 500
+                Arguments.of(withSteps("\"title\": \"T\\u0000\",", VALID_STEPS), "title"),
+                Arguments.of(withSteps(t + "\"description\": \"a\\u0000b\",", VALID_STEPS), "description"),
+                Arguments.of(withSteps(t + "\"yarn\": \"\\u0000\",", VALID_STEPS), "yarn"),
+                Arguments.of(withSteps(t + "\"sourceUrl\": \"\\u0000\",", VALID_STEPS), "sourceUrl"),
+                Arguments.of(withSteps(t + "\"imageUrl\": \"\\u0000\",", VALID_STEPS), "imageUrl"),
+                Arguments.of(withSteps(t, """
+                        [ { "title": "A\\u0000", "rows": [ { "number": "1", "value": "6ms" } ] } ]"""),
+                        "steps[0].title"),
+                Arguments.of(withSteps(t, """
+                        [ { "title": "A", "rows": [ { "number": "1\\u0000", "value": "6ms" } ] } ]"""),
+                        "steps[0].rows[0].number"),
+                Arguments.of(withSteps(t, """
+                        [ { "title": "A", "rows": [ { "number": "1", "value": "6ms\\u0000" } ] } ]"""),
                         "steps[0].rows[0].value"));
     }
 

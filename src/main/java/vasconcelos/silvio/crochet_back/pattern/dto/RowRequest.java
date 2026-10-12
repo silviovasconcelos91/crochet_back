@@ -4,6 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record RowRequest(
-        @NotBlank @Size(max = 20) String number,
-        @NotBlank String value) {
+        @NotBlank @Size(max = 20) @NoNulCharacter String number,
+        @NotBlank @NoNulCharacter String value) {
 }

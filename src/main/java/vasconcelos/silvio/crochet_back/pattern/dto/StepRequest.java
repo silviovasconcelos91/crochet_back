@@ -9,6 +9,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record StepRequest(
-        @NotBlank @Size(max = 200) String title,
+        @NotBlank @Size(max = 200) @NoNulCharacter String title,
         @NotEmpty List<@NotNull @Valid RowRequest> rows) {
 }
