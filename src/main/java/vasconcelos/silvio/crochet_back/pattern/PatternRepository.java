@@ -12,7 +12,7 @@ public interface PatternRepository extends JpaRepository<Pattern, Long> {
             select new vasconcelos.silvio.crochet_back.pattern.dto.PatternSummary(
                 p.id, p.title, p.description, p.hookSizeMm, p.yarn, p.imageUrl, size(p.steps))
             from Pattern p
-            order by lower(p.title)
+            order by lower(p.title), p.id
             """)
     List<PatternSummary> findAllSummaries();
 }

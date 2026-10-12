@@ -62,6 +62,20 @@ class PatternRepositoryTests {
         assertThat(summaries).extracting(PatternSummary::stepCount).containsExactly(3, 2, 1);
     }
 
+    @Test
+    void findAllSummariesBreaksTitleTiesById() {
+        Pattern first = repository.save(pattern("Bonnet", 1));
+        Pattern second = repository.save(pattern("bonnet", 1));
+        // updating the first row rewrites its tuple after the second one in the heap,
+        // so an order relying on physical position would return second before first
+        first.setDescription("modifié");
+        em.flush();
+
+        List<PatternSummary> summaries = repository.findAllSummaries();
+
+        assertThat(summaries).extracting(PatternSummary::id).containsExactly(first.getId(), second.getId());
+    }
+
     private static Pattern pattern(String title, int stepCount) {
         Pattern pattern = new Pattern();
         pattern.setTitle(title);
