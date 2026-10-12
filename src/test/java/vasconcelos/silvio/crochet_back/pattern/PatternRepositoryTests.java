@@ -9,10 +9,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 import vasconcelos.silvio.crochet_back.account.Account;
 import vasconcelos.silvio.crochet_back.account.AccountRepository;
+import vasconcelos.silvio.crochet_back.support.TestDatabase;
 
 import java.util.List;
 
@@ -35,10 +37,15 @@ class PatternRepositoryTests {
     @Autowired
     EntityManagerFactory emf;
 
+    @Autowired
+    JdbcTemplate jdbc;
+
     Long ownerId;
 
     @BeforeEach
     void createOwner() {
+        // other classes sharing this context commit rows; the truncate is rolled back with the test
+        TestDatabase.reset(jdbc);
         ownerId = accounts.save(new Account("moi@exemple.fr", "hash")).getId();
     }
 

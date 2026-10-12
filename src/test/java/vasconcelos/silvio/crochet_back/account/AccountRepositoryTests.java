@@ -1,12 +1,15 @@
 package vasconcelos.silvio.crochet_back.account;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
+import vasconcelos.silvio.crochet_back.support.TestDatabase;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,6 +24,15 @@ class AccountRepositoryTests {
 
     @Autowired
     AccountService accountService;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    @BeforeEach
+    void emptyDatabase() {
+        // other classes sharing this context commit rows; the truncate is rolled back with the test
+        TestDatabase.reset(jdbc);
+    }
 
     @Test
     void savesAndFindsAccountByEmail() {
