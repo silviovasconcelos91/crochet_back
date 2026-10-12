@@ -33,6 +33,9 @@ public class Pattern {
     @Setter(AccessLevel.NONE)
     private Long id;
 
+    @Column(name = "owner_id", nullable = false, updatable = false)
+    private Long ownerId;
+
     @Column(nullable = false, length = 200)
     private String title;
 

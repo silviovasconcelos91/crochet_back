@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import vasconcelos.silvio.crochet_back.account.AccountPrincipal;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternSummary;
@@ -29,18 +31,19 @@ public class PatternController {
     private final PatternService service;
 
     @GetMapping
-    public List<PatternSummary> list() {
-        return service.list();
+    public List<PatternSummary> list(@AuthenticationPrincipal AccountPrincipal principal) {
+        return service.list(principal.id());
     }
 
     @GetMapping("/{id}")
-    public PatternResponse get(@PathVariable long id) {
-        return service.get(id);
+    public PatternResponse get(@AuthenticationPrincipal AccountPrincipal principal, @PathVariable long id) {
+        return service.get(principal.id(), id);
     }
 
     @PostMapping
-    public ResponseEntity<PatternResponse> create(@Valid @RequestBody PatternRequest request) {
-        PatternResponse created = service.create(request);
+    public ResponseEntity<PatternResponse> create(
+            @AuthenticationPrincipal AccountPrincipal principal, @Valid @RequestBody PatternRequest request) {
+        PatternResponse created = service.create(principal.id(), request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(created.id())
@@ -49,13 +52,16 @@ public class PatternController {
     }
 
     @PutMapping("/{id}")
-    public PatternResponse replace(@PathVariable long id, @Valid @RequestBody PatternRequest request) {
-        return service.replace(id, request);
+    public PatternResponse replace(
+            @AuthenticationPrincipal AccountPrincipal principal,
+            @PathVariable long id,
+            @Valid @RequestBody PatternRequest request) {
+        return service.replace(principal.id(), id, request);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable long id) {
-        service.delete(id);
+    public void delete(@AuthenticationPrincipal AccountPrincipal principal, @PathVariable long id) {
+        service.delete(principal.id(), id);
     }
 }

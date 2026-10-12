@@ -1,12 +1,15 @@
 package vasconcelos.silvio.crochet_back.pattern;
 
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
+import vasconcelos.silvio.crochet_back.account.Account;
+import vasconcelos.silvio.crochet_back.account.AccountRepository;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternSummary;
 
 import java.util.List;
@@ -22,12 +25,23 @@ class PatternRepositoryTests {
     PatternRepository repository;
 
     @Autowired
+    AccountRepository accounts;
+
+    @Autowired
     EntityManager em;
+
+    Long ownerId;
+
+    @BeforeEach
+    void createOwner() {
+        ownerId = accounts.save(new Account("moi@exemple.fr", "hash")).getId();
+    }
 
     @Test
     void persistsStepsAndRowsOrderedByPosition() {
         Pattern pattern = new Pattern();
         pattern.setTitle("Chat");
+        pattern.setOwnerId(ownerId);
         Step head = new Step(0, "Tête");
         head.addRow(new PatternRow(1, "2", "6aug (12)"));
         head.addRow(new PatternRow(0, "1", "6ms (6)"));
@@ -56,7 +70,7 @@ class PatternRepositoryTests {
         repository.save(pattern("Chat", 2));
         repository.save(pattern("abeille", 3));
 
-        List<PatternSummary> summaries = repository.findAllSummaries();
+        List<PatternSummary> summaries = repository.findAllSummaries(ownerId);
 
         assertThat(summaries).extracting(PatternSummary::title).containsExactly("abeille", "Chat", "zèbre");
         assertThat(summaries).extracting(PatternSummary::stepCount).containsExactly(3, 2, 1);
@@ -71,14 +85,28 @@ class PatternRepositoryTests {
         first.setDescription("modifié");
         em.flush();
 
-        List<PatternSummary> summaries = repository.findAllSummaries();
+        List<PatternSummary> summaries = repository.findAllSummaries(ownerId);
 
         assertThat(summaries).extracting(PatternSummary::id).containsExactly(first.getId(), second.getId());
     }
 
-    private static Pattern pattern(String title, int stepCount) {
+    @Test
+    void findAllSummariesAndFindByIdAreScopedToTheOwner() {
+        Long otherOwner = accounts.save(new Account("autre@exemple.fr", "hash")).getId();
+        Pattern mine = repository.save(pattern("Mien", 1));
+        Pattern theirs = pattern("Sien", 1);
+        theirs.setOwnerId(otherOwner);
+        repository.save(theirs);
+
+        assertThat(repository.findAllSummaries(ownerId)).extracting(PatternSummary::title).containsExactly("Mien");
+        assertThat(repository.findByIdAndOwnerId(mine.getId(), ownerId)).isPresent();
+        assertThat(repository.findByIdAndOwnerId(theirs.getId(), ownerId)).isEmpty();
+    }
+
+    private Pattern pattern(String title, int stepCount) {
         Pattern pattern = new Pattern();
         pattern.setTitle(title);
+        pattern.setOwnerId(ownerId);
         for (int i = 0; i < stepCount; i++) {
             Step step = new Step(i, "Étape " + i);
             step.addRow(new PatternRow(0, "1", "6ms"));

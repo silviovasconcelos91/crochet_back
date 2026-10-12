@@ -1,0 +1,92 @@
+package vasconcelos.silvio.crochet_back.pattern;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.WebApplicationContext;
+import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
+import vasconcelos.silvio.crochet_back.account.AccountPrincipal;
+import vasconcelos.silvio.crochet_back.account.AccountRepository;
+import vasconcelos.silvio.crochet_back.support.TestAccounts;
+import vasconcelos.silvio.crochet_back.support.TestDatabase;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static vasconcelos.silvio.crochet_back.pattern.PatternJson.CHAT;
+import static vasconcelos.silvio.crochet_back.pattern.PatternJson.create;
+import static vasconcelos.silvio.crochet_back.pattern.PatternJson.titled;
+
+@SpringBootTest
+@Import(TestcontainersConfiguration.class)
+class PatternOwnershipApiTests {
+
+    @Autowired
+    WebApplicationContext context;
+
+    @Autowired
+    AccountRepository accounts;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    AccountPrincipal alice;
+    MockMvc aliceMvc;
+    MockMvc bobMvc;
+
+    @BeforeEach
+    void setUp() {
+        TestDatabase.reset(jdbc);
+        alice = TestAccounts.create(accounts, passwordEncoder, "alice@exemple.fr");
+        aliceMvc = TestAccounts.mockMvcAs(context, alice);
+        bobMvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "bob@exemple.fr"));
+    }
+
+    @Test
+    void createdPatternBelongsToTheLoggedInAccount() throws Exception {
+        String location = create(aliceMvc, CHAT);
+        long id = Long.parseLong(location.substring(location.lastIndexOf('/') + 1));
+
+        Long ownerId = jdbc.queryForObject("select owner_id from pattern where id = ?", Long.class, id);
+        assertThat(ownerId).isEqualTo(alice.id());
+    }
+
+    @Test
+    void listOnlyContainsOwnPatterns() throws Exception {
+        create(aliceMvc, CHAT);
+        create(bobMvc, titled("Bonnet"));
+
+        aliceMvc.perform(get("/api/patterns"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].title").value("Amigurumi Chat"));
+        bobMvc.perform(get("/api/patterns"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].title").value("Bonnet"));
+    }
+
+    @Test
+    void otherAccountsPatternIsNotFoundForEveryOperation() throws Exception {
+        String location = create(aliceMvc, CHAT);
+
+        bobMvc.perform(get(location)).andExpect(status().isNotFound());
+        bobMvc.perform(put(location).contentType(APPLICATION_JSON).content(titled("Volé")))
+                .andExpect(status().isNotFound());
+        bobMvc.perform(delete(location)).andExpect(status().isNotFound());
+
+        aliceMvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Amigurumi Chat"));
+    }
+}
