@@ -5,3 +5,10 @@ crochet:
   login-limit:
     max-failures-per-email: 1000
     max-requests-per-ip: 100000
+
+# pinned to the shipped default so the cookie tests do not depend on a local SESSION_COOKIE_SECURE
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true

@@ -211,6 +211,15 @@ class AuthApiTests {
     }
 
     @Test
+    void loginWithOverlongEmailIsBadRequest() throws Exception {
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content(credentials("a".repeat(250) + "@x.fr", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItem("email")));
+    }
+
+    @Test
     void loginWithMissingFieldIsBadRequest() throws Exception {
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)

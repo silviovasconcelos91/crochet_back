@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -57,16 +56,10 @@ public class AuthController {
     public AccountResponse login(
             @Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
         loginAttempts.acquireForIp(request.getRemoteAddr());
-        // checked before hashing, so a locked email costs no BCrypt work; unknown emails are counted
+        // reserved before hashing, so a locked email costs no BCrypt work; unknown emails are counted
         // too, so a lock reveals nothing about which accounts exist
-        loginAttempts.checkEmail(body.email());
-        AccountPrincipal principal;
-        try {
-            principal = signIn(body.email(), body.password(), request, response);
-        } catch (BadCredentialsException ex) {
-            loginAttempts.recordFailure(body.email());
-            throw ex;
-        }
+        loginAttempts.acquireForEmail(body.email());
+        AccountPrincipal principal = signIn(body.email(), body.password(), request, response);
         loginAttempts.recordSuccess(body.email());
         return AccountResponse.from(accountService.get(principal.id()));
     }

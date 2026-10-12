@@ -14,6 +14,7 @@ import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 import vasconcelos.silvio.crochet_back.support.Browser;
 import vasconcelos.silvio.crochet_back.support.TestDatabase;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -70,8 +71,8 @@ class LoginRateLimitApiTests {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("Too many attempts, try again later"))
-                // 15 min from the first failure, rounded up to whole seconds
-                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "900"));
+                // what remains of the 15 min counted from the first attempt
+                .andExpect(header().string(HttpHeaders.RETRY_AFTER, matchesPattern("8[6-9][0-9]|900")));
     }
 
     @Test
