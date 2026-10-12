@@ -62,7 +62,7 @@ class PatternApiTests {
     @BeforeEach
     void setUp() {
         TestDatabase.reset(jdbc);
-        mvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "moi@exemple.fr"));
+        mvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "moi"));
     }
 
     @Test

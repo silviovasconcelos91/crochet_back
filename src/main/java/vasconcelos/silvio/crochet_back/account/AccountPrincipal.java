@@ -12,15 +12,13 @@ import java.util.List;
 public final class AccountPrincipal implements UserDetails, CredentialsContainer {
 
     @Serial
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     private final Long id;
-    private final String email;
     private String passwordHash;
 
-    public AccountPrincipal(Long id, String email, String passwordHash) {
+    public AccountPrincipal(Long id, String passwordHash) {
         this.id = id;
-        this.email = email;
         this.passwordHash = passwordHash;
     }
 
@@ -28,9 +26,10 @@ public final class AccountPrincipal implements UserDetails, CredentialsContainer
         return id;
     }
 
+    /** The account id: it is the session's principal name, so renaming the account keeps its sessions. */
     @Override
     public String getUsername() {
-        return email;
+        return String.valueOf(id);
     }
 
     @Override

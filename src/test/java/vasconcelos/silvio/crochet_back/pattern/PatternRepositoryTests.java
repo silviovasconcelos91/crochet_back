@@ -46,7 +46,7 @@ class PatternRepositoryTests {
     void createOwner() {
         // other classes sharing this context commit rows; the truncate is rolled back with the test
         TestDatabase.reset(jdbc);
-        ownerId = accounts.save(new Account("moi@exemple.fr", "hash")).getId();
+        ownerId = accounts.save(new Account("moi", "moi@exemple.fr", "hash")).getId();
     }
 
     @Test
@@ -104,7 +104,7 @@ class PatternRepositoryTests {
 
     @Test
     void findAllSummariesAndFindByIdAreScopedToTheOwner() {
-        Long otherOwner = accounts.save(new Account("autre@exemple.fr", "hash")).getId();
+        Long otherOwner = accounts.save(new Account("autre", "autre@exemple.fr", "hash")).getId();
         Pattern mine = repository.save(pattern("Mien", 1));
         Pattern theirs = pattern("Sien", 1);
         theirs.setOwnerId(otherOwner);

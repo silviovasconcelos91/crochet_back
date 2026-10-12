@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vasconcelos.silvio.crochet_back.config.InvalidFieldException;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -18,17 +21,28 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final AccountSessions accountSessions;
 
-    /** {@code email} must already be normalized. */
+    /** {@code username} and {@code email} must already be normalized. */
     @Transactional
-    public Account register(String email, String rawPassword) {
+    public Account register(String username, String email, String rawPassword) {
+        List<String> taken = new ArrayList<>();
+        if (accounts.existsByUsernameKey(Usernames.key(username))) {
+            taken.add("username");
+        }
         if (accounts.existsByEmail(email)) {
-            throw new EmailAlreadyUsedException();
+            taken.add("email");
+        }
+        if (!taken.isEmpty()) {
+            throw new AlreadyUsedException(taken);
         }
         try {
-            return accounts.saveAndFlush(new Account(email, passwordEncoder.encode(rawPassword)));
+            return accounts.saveAndFlush(new Account(username, email, passwordEncoder.encode(rawPassword)));
         } catch (DataIntegrityViolationException ex) {
+            // registered concurrently
+            if (violates(ex, "uk_account_username_key")) {
+                throw new AlreadyUsedException(List.of("username"));
+            }
             if (violates(ex, "uk_account_email")) {
-                throw new EmailAlreadyUsedException(); // registered concurrently
+                throw new AlreadyUsedException(List.of("email"));
             }
             throw ex;
         }
@@ -60,7 +74,7 @@ public class AccountService {
             throw new InvalidFieldException("currentPassword", "is incorrect");
         }
         account.setPasswordHash(passwordEncoder.encode(newPassword));
-        accountSessions.invalidateAllExcept(account.getEmail(), keptSessionId);
+        accountSessions.invalidateAllExcept(String.valueOf(account.getId()), keptSessionId);
     }
 
     /** Patterns, steps, rows and progress go with the account through ON DELETE CASCADE. */

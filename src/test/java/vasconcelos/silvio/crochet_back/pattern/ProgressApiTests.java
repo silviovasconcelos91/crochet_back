@@ -65,7 +65,7 @@ class ProgressApiTests {
     @BeforeEach
     void setUp() throws Exception {
         TestDatabase.reset(jdbc);
-        mvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "moi@exemple.fr"));
+        mvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "moi"));
         location = create(mvc, CHAT); // steps: "Tête" (3 rows), "Corps" (1 row)
     }
 
@@ -208,7 +208,7 @@ class ProgressApiTests {
     @Test
     void otherAccountCannotTouchProgress() throws Exception {
         putProgressOk(progress("IN_PROGRESS", 0, 1));
-        MockMvc bob = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "bob@exemple.fr"));
+        MockMvc bob = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "bob"));
 
         putProgress(bob, progress("FINISHED", 1, 0)).andExpect(status().isNotFound());
         bob.perform(delete(location + "/progress")).andExpect(status().isNotFound());

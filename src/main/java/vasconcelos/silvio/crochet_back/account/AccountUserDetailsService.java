@@ -14,8 +14,8 @@ public class AccountUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) {
-        return accounts.findByEmail(Emails.normalize(username))
-                .map(account -> new AccountPrincipal(account.getId(), account.getEmail(), account.getPasswordHash()))
+        return accounts.findByUsernameKey(Usernames.key(username))
+                .map(account -> new AccountPrincipal(account.getId(), account.getPasswordHash()))
                 .orElseThrow(() -> new UsernameNotFoundException("Unknown account"));
     }
 }

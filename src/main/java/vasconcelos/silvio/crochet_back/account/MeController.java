@@ -41,7 +41,7 @@ public class MeController {
             HttpServletRequest request) {
         // throttled: a stolen session must not become a way to guess the password
         String sessionId = request.getSession().getId();
-        loginAttempts.checkFromSession(principal.getUsername(), request.getRemoteAddr(), InvalidFieldException.class,
+        loginAttempts.checkFromSession(throttleKey(principal), request.getRemoteAddr(), InvalidFieldException.class,
                 () -> accountService.changePassword(
                         principal.id(), body.currentPassword(), body.newPassword(), sessionId));
     }
@@ -52,7 +52,8 @@ public class MeController {
             @AuthenticationPrincipal AccountPrincipal principal,
             @Valid @RequestBody DeleteAccountRequest body,
             HttpServletRequest request) {
-        loginAttempts.checkFromSession(principal.getUsername(), request.getRemoteAddr(), InvalidFieldException.class,
+        String key = throttleKey(principal); // before the delete: the account is gone afterwards
+        loginAttempts.checkFromSession(key, request.getRemoteAddr(), InvalidFieldException.class,
                 () -> accountService.delete(principal.id(), body.password()));
         HttpSession current = request.getSession();
         accountSessions.invalidateAllExcept(principal.getUsername(), current.getId());
@@ -60,5 +61,10 @@ public class MeController {
         // save it again at the end of the request, and expires its cookie.
         current.invalidate();
         SecurityContextHolder.clearContext();
+    }
+
+    /** The same key as the login's throttle; read from the account because the principal's name is its id. */
+    private String throttleKey(AccountPrincipal principal) {
+        return accountService.get(principal.id()).getUsernameKey();
     }
 }

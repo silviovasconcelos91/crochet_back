@@ -52,9 +52,9 @@ class PatternOwnershipApiTests {
     @BeforeEach
     void setUp() {
         TestDatabase.reset(jdbc);
-        alice = TestAccounts.create(accounts, passwordEncoder, "alice@exemple.fr");
+        alice = TestAccounts.create(accounts, passwordEncoder, "alice");
         aliceMvc = TestAccounts.mockMvcAs(context, alice);
-        bob = TestAccounts.create(accounts, passwordEncoder, "bob@exemple.fr");
+        bob = TestAccounts.create(accounts, passwordEncoder, "bob");
         bobMvc = TestAccounts.mockMvcAs(context, bob);
     }
 

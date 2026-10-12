@@ -36,10 +36,11 @@ class AccountRepositoryTests {
 
     @Test
     void savesAndFindsAccountByEmail() {
-        Account saved = accounts.saveAndFlush(new Account("moi@exemple.fr", "hash"));
+        Account saved = accounts.saveAndFlush(new Account("moi", "moi@exemple.fr", "hash"));
 
         Account found = accounts.findByEmail("moi@exemple.fr").orElseThrow();
         assertThat(found.getId()).isEqualTo(saved.getId());
+        assertThat(accounts.findByUsernameKey("moi").orElseThrow().getId()).isEqualTo(saved.getId());
         assertThat(found.getPasswordHash()).isEqualTo("hash");
         assertThat(found.getCreatedAt()).isNotNull();
         assertThat(accounts.existsByEmail("moi@exemple.fr")).isTrue();
@@ -48,22 +49,30 @@ class AccountRepositoryTests {
 
     @Test
     void rejectsDuplicateEmail() {
-        accounts.saveAndFlush(new Account("moi@exemple.fr", "hash"));
+        accounts.saveAndFlush(new Account("moi", "moi@exemple.fr", "hash"));
 
-        assertThatThrownBy(() -> accounts.saveAndFlush(new Account("moi@exemple.fr", "hash2")))
+        assertThatThrownBy(() -> accounts.saveAndFlush(new Account("autre", "moi@exemple.fr", "hash2")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void rejectsDuplicateUsernameKey() {
+        accounts.saveAndFlush(new Account("Moi", "moi@exemple.fr", "hash"));
+
+        assertThatThrownBy(() -> accounts.saveAndFlush(new Account("MOI", "autre@exemple.fr", "hash")))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void rejectsNonLowercaseEmail() {
-        assertThatThrownBy(() -> accounts.saveAndFlush(new Account("Moi@Exemple.fr", "hash")))
+        assertThatThrownBy(() -> accounts.saveAndFlush(new Account("moi", "Moi@Exemple.fr", "hash")))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
     void registerReportsOnlyTheEmailUniqueConstraintAsAlreadyUsed() {
         // breaks the lowercase CHECK, not the unique constraint: not an "email already used" conflict
-        assertThatThrownBy(() -> accountService.register("Moi@Exemple.fr", "motdepasse-secret"))
+        assertThatThrownBy(() -> accountService.register("moi", "Moi@Exemple.fr", "motdepasse-secret"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

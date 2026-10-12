@@ -30,7 +30,7 @@ import static vasconcelos.silvio.crochet_back.support.TestAccounts.PASSWORD;
 @Import(TestcontainersConfiguration.class)
 class AccountManagementApiTests {
 
-    static final String EMAIL = "moi@exemple.fr";
+    static final String USERNAME = "moi";
     static final String NEW_PASSWORD = "nouveau-secret";
     static final String PATTERN = """
             { "title": "Chat", "steps": [ { "title": "Tête", "rows": [ { "number": "1", "value": "6ms" } ] } ] }""";
@@ -52,9 +52,14 @@ class AccountManagementApiTests {
         TestDatabase.reset(jdbc);
     }
 
+    static String registration(String password) {
+        return """
+                { "username": "%s", "email": "moi@exemple.fr", "password": "%s" }""".formatted(USERNAME, password);
+    }
+
     static String credentials(String password) {
         return """
-                { "email": "%s", "password": "%s" }""".formatted(EMAIL, password);
+                { "username": "%s", "password": "%s" }""".formatted(USERNAME, password);
     }
 
     static String passwordChange(String current, String next) {
@@ -64,7 +69,7 @@ class AccountManagementApiTests {
 
     Browser registered() throws Exception {
         Browser browser = new Browser(mvc).fetchCsrf();
-        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(credentials(PASSWORD)))
+        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(registration(PASSWORD)))
                 .andExpect(status().isCreated());
         return browser;
     }
@@ -138,7 +143,8 @@ class AccountManagementApiTests {
         loggedIn(PASSWORD);
 
         transactionTemplate.executeWithoutResult(status -> {
-            accountSessions.invalidateAllExcept(EMAIL, "none");
+            accountSessions.invalidateAllExcept(
+                    String.valueOf(jdbc.queryForObject("select id from account", Long.class)), "none");
             status.setRollbackOnly();
         });
 

@@ -28,6 +28,12 @@ public class Account {
     @Column(nullable = false, length = 254)
     private String email;
 
+    @Column(nullable = false, length = 30)
+    private String username;
+
+    @Column(name = "username_key", nullable = false, length = 60)
+    private String usernameKey;
+
     @Setter
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
@@ -35,10 +41,17 @@ public class Account {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    /** {@code email} must already be normalized (see {@link Emails#normalize}). */
-    public Account(String email, String passwordHash) {
+    /** {@code username} and {@code email} must already be normalized ({@link Usernames}, {@link Emails}). */
+    public Account(String username, String email, String passwordHash) {
         this.email = email;
         this.passwordHash = passwordHash;
+        rename(username);
+    }
+
+    /** {@code username} must already be normalized; its key is derived here so the two never diverge. */
+    public void rename(String username) {
+        this.username = username;
+        this.usernameKey = Usernames.key(username);
     }
 
     @PrePersist

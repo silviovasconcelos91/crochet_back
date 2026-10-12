@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -60,16 +62,115 @@ class AuthApiTests {
         TestDatabase.reset(jdbc);
     }
 
-    static String credentials(String email, String password) {
+    static String registration(String username, String email, String password) {
         return """
-                { "email": "%s", "password": "%s" }""".formatted(email, password);
+                { "username": "%s", "email": "%s", "password": "%s" }""".formatted(username, email, password);
     }
 
-    Browser registered(String email) throws Exception {
+    /** Email derived from the username, for tests that do not care about it. */
+    static String registration(String username, String password) {
+        return registration(username, Usernames.key(username) + "@exemple.fr", password);
+    }
+
+    static String credentials(String username, String password) {
+        return """
+                { "username": "%s", "password": "%s" }""".formatted(username, password);
+    }
+
+    Browser registered(String username) throws Exception {
         Browser browser = new Browser(mvc).fetchCsrf();
-        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(credentials(email, PASSWORD)))
+        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(registration(username, PASSWORD)))
                 .andExpect(status().isCreated());
         return browser;
+    }
+
+    Long accountId(String username) {
+        return jdbc.queryForObject("select id from account where username_key = ?", Long.class, Usernames.key(username));
+    }
+
+    @Test
+    void registerReturnsUsernameAndEmail() throws Exception {
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration(" Amélie ", "Amelie@Exemple.fr", PASSWORD)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.username").value("Amélie"))
+                .andExpect(jsonPath("$.email").value("amelie@exemple.fr"));
+    }
+
+    @Test
+    void takenUsernameIgnoringCaseIsConflictOnUsername() throws Exception {
+        registered("Moi");
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration("MOI", "autre@exemple.fr", PASSWORD)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Already used"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("username"))
+                .andExpect(jsonPath("$.errors[0].message").value("is already used"));
+    }
+
+    @Test
+    void takenUsernameAndEmailAreBothReported() throws Exception {
+        registered("moi");
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration("moi", "moi@exemple.fr", PASSWORD)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("username", "email")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ab", "moi toi", "moi@exemple.fr"})
+    void invalidUsernameIsBadRequest(String username) throws Exception {
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration(username, "x@exemple.fr", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItem("username")));
+    }
+
+    @Test
+    void loginIgnoresUsernameCase() throws Exception {
+        registered("Moi");
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials(" mOI ", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("Moi"));
+    }
+
+    @Test
+    void loginMatchesDecomposedAccents() throws Exception {
+        registered("Amélie");
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content(credentials("Amélie", PASSWORD)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void loginWithEmailIsUnauthorized() throws Exception {
+        registered("moi");
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value("Invalid username or password"));
+    }
+
+    @Test
+    void sessionPrincipalIsTheAccountId() throws Exception {
+        registered("moi");
+
+        Integer stored = jdbc.queryForObject("select count(*) from spring_session where principal_name = ?",
+                Integer.class, String.valueOf(accountId("moi")));
+        assertThat(stored).isEqualTo(1);
     }
 
     @Test
@@ -77,9 +178,10 @@ class AuthApiTests {
         Browser browser = new Browser(mvc).fetchCsrf();
 
         browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("Moi@Exemple.fr", PASSWORD)))
+                        .content(registration("moi", "Moi@Exemple.fr", PASSWORD)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(notNullValue()))
+                .andExpect(jsonPath("$.username").value("moi"))
                 .andExpect(jsonPath("$.email").value("moi@exemple.fr"))
                 .andExpect(jsonPath("$.createdAt").value(notNullValue()))
                 .andExpect(jsonPath("$.password").doesNotExist())
@@ -103,7 +205,7 @@ class AuthApiTests {
         Browser browser = new Browser(mvc).fetchCsrf();
 
         MvcResult result = browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(registration("moi", PASSWORD)))
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -113,31 +215,32 @@ class AuthApiTests {
                         .contains("HttpOnly")
                         .contains("Secure")
                         .contains("SameSite=Lax"));
-        Integer stored = jdbc.queryForObject(
-                "select count(*) from spring_session where principal_name = 'moi@exemple.fr'", Integer.class);
+        Integer stored = jdbc.queryForObject("select count(*) from spring_session where principal_name = ?",
+                Integer.class, String.valueOf(accountId("moi")));
         assertThat(stored).isEqualTo(1);
     }
 
     @Test
     void registerWithTakenEmailIgnoringCaseIsConflict() throws Exception {
-        registered("moi@exemple.fr");
+        registered("moi");
 
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("  MOI@exemple.FR ", PASSWORD)))
+                        .content(registration("autre", "  MOI@exemple.FR ", PASSWORD)))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value("Email already used"));
+                .andExpect(jsonPath("$.detail").value("Already used"))
+                .andExpect(jsonPath("$.errors[0].field").value("email"));
     }
 
     static Stream<Arguments> invalidRegistrations() {
         return Stream.of(
-                Arguments.of(credentials("pas-un-email", PASSWORD), "email"),
-                Arguments.of(credentials(" ", PASSWORD), "email"),
-                Arguments.of(credentials("a".repeat(250) + "@x.fr", PASSWORD), "email"),
-                Arguments.of(credentials("moi@exemple.fr", "1234567"), "password"),
-                Arguments.of(credentials("moi@exemple.fr", "é".repeat(37)), "password"),
-                Arguments.of("{ \"email\": \"moi@exemple.fr\" }", "password"));
+                Arguments.of(registration("moi", "pas-un-email", PASSWORD), "email"),
+                Arguments.of(registration("moi", " ", PASSWORD), "email"),
+                Arguments.of(registration("moi", "a".repeat(250) + "@x.fr", PASSWORD), "email"),
+                Arguments.of(registration("moi", "1234567"), "password"),
+                Arguments.of(registration("moi", "é".repeat(37)), "password"),
+                Arguments.of("{ \"username\": \"moi\", \"email\": \"moi@exemple.fr\" }", "password"));
     }
 
     @ParameterizedTest
@@ -155,97 +258,88 @@ class AuthApiTests {
     void registerAcceptsPasswordOfExactly72Bytes() throws Exception {
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", "é".repeat(36))))
+                        .content(registration("moi", "é".repeat(36))))
                 .andExpect(status().isCreated());
     }
 
     @Test
     void registerWhileLoggedInSwitchesAccount() throws Exception {
-        Browser browser = registered("premier@exemple.fr");
+        Browser browser = registered("premier");
 
         browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("second@exemple.fr", PASSWORD)))
+                        .content(registration("second", PASSWORD)))
                 .andExpect(status().isCreated());
 
-        browser.perform(get("/api/me")).andExpect(jsonPath("$.email").value("second@exemple.fr"));
+        browser.perform(get("/api/me")).andExpect(jsonPath("$.username").value("second"));
     }
 
     @Test
     void loginOpensSession() throws Exception {
-        registered("moi@exemple.fr");
+        registered("moi");
         Browser browser = new Browser(mvc).fetchCsrf();
 
         browser.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(credentials("moi", PASSWORD)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("moi"))
                 .andExpect(jsonPath("$.email").value("moi@exemple.fr"));
 
         browser.perform(get("/api/me")).andExpect(status().isOk());
     }
 
     @Test
-    void loginNormalizesEmail() throws Exception {
-        registered("moi@exemple.fr");
+    void loginFailureIsIdenticalForWrongPasswordAndUnknownUsername() throws Exception {
+        registered("moi");
 
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("  Moi@EXEMPLE.fr ", PASSWORD)))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    void loginFailureIsIdenticalForWrongPasswordAndUnknownEmail() throws Exception {
-        registered("moi@exemple.fr");
-
-        new Browser(mvc).fetchCsrf()
-                .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", "mauvais-mot-de-passe")))
+                        .content(credentials("moi", "mauvais-mot-de-passe")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value("Invalid email or password"));
+                .andExpect(jsonPath("$.detail").value("Invalid username or password"));
 
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("inconnu@exemple.fr", PASSWORD)))
+                        .content(credentials("inconnu", PASSWORD)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.detail").value("Invalid email or password"));
+                .andExpect(jsonPath("$.detail").value("Invalid username or password"));
     }
 
     @Test
     void loginWithOverlongPasswordIsUnauthorized() throws Exception {
-        registered("moi@exemple.fr");
+        registered("moi");
 
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", "é".repeat(60))))
+                        .content(credentials("moi", "é".repeat(60))))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void loginWithOverlongEmailIsBadRequest() throws Exception {
+    void loginWithOverlongUsernameIsBadRequest() throws Exception {
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("a".repeat(250) + "@x.fr", PASSWORD)))
+                        .content(credentials("a".repeat(255), PASSWORD)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors[*].field", hasItem("email")));
+                .andExpect(jsonPath("$.errors[*].field", hasItem("username")));
     }
 
     @Test
     void loginWithMissingFieldIsBadRequest() throws Exception {
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content("{ \"email\": \"moi@exemple.fr\" }"))
+                        .content("{ \"username\": \"moi\" }"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItem("password")));
     }
 
     @Test
     void loginChangesSessionId() throws Exception {
-        Browser browser = registered("moi@exemple.fr");
+        Browser browser = registered("moi");
         Cookie before = browser.cookie("SESSION");
 
         browser.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(credentials("moi", PASSWORD)))
                 .andExpect(status().isOk());
 
         assertThat(browser.cookie("SESSION").getValue()).isNotEqualTo(before.getValue());
@@ -254,12 +348,12 @@ class AuthApiTests {
 
     @Test
     void loginIssuesFreshCsrfToken() throws Exception {
-        registered("moi@exemple.fr");
+        registered("moi");
         Browser browser = new Browser(mvc).fetchCsrf();
         Cookie before = browser.cookie("XSRF-TOKEN");
 
         browser.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(credentials("moi", PASSWORD)))
                 .andExpect(status().isOk());
 
         assertThat(browser.cookie("XSRF-TOKEN").getValue()).isNotEqualTo(before.getValue());
@@ -277,7 +371,7 @@ class AuthApiTests {
         Cookie before = browser.cookie("XSRF-TOKEN");
 
         browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(registration("moi", PASSWORD)))
                 .andExpect(status().isCreated());
 
         assertThat(browser.cookie("XSRF-TOKEN").getValue()).isNotEqualTo(before.getValue());
@@ -286,7 +380,7 @@ class AuthApiTests {
     @Test
     void postWithoutCsrfTokenIsForbidden() throws Exception {
         mvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(credentials("moi", PASSWORD)))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("Access denied"));
@@ -295,7 +389,7 @@ class AuthApiTests {
     static Stream<Arguments> stateChangingRequests() {
         return Stream.of(
                 Arguments.of(post("/api/auth/register").contentType(APPLICATION_JSON)
-                        .content(credentials("autre@exemple.fr", PASSWORD))),
+                        .content(registration("autre", PASSWORD))),
                 Arguments.of(post("/api/auth/logout")),
                 Arguments.of(put("/api/me/password").contentType(APPLICATION_JSON)
                         .content("{ \"currentPassword\": \"%s\", \"newPassword\": \"nouveau-secret\" }"
@@ -308,7 +402,7 @@ class AuthApiTests {
     @MethodSource("stateChangingRequests")
     void stateChangingRequestWithoutCsrfTokenIsForbiddenEvenWithASession(MockHttpServletRequestBuilder request)
             throws Exception {
-        Browser browser = registered("moi@exemple.fr");
+        Browser browser = registered("moi");
 
         mvc.perform(request.cookie(browser.cookie("SESSION"))).andExpect(status().isForbidden());
 
@@ -318,15 +412,15 @@ class AuthApiTests {
 
     @Test
     void storedSessionsKeepNoPasswordHash() throws Exception {
-        registered("inscrit@exemple.fr");
-        registered("connecte@exemple.fr");
+        registered("inscrit");
+        registered("connecte");
         new Browser(mvc).fetchCsrf()
                 .perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("connecte@exemple.fr", PASSWORD)))
+                        .content(credentials("connecte", PASSWORD)))
                 .andExpect(status().isOk());
 
-        for (String email : List.of("inscrit@exemple.fr", "connecte@exemple.fr")) {
-            assertThat(sessions.findByPrincipalName(email).values()).isNotEmpty().allSatisfy(session -> {
+        for (String username : List.of("inscrit", "connecte")) {
+            assertThat(sessions.findByPrincipalName(String.valueOf(accountId(username))).values()).isNotEmpty().allSatisfy(session -> {
                 SecurityContext context = session.getAttribute(
                         HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
                 assertThat(((AccountPrincipal) context.getAuthentication().getPrincipal()).getPassword()).isNull();
@@ -344,7 +438,7 @@ class AuthApiTests {
 
     @Test
     void sessionOutlivingItsAccountIsEnded() throws Exception {
-        Browser browser = registered("moi@exemple.fr");
+        Browser browser = registered("moi");
         jdbc.update("delete from account");
 
         browser.perform(get("/api/me")).andExpect(status().isUnauthorized());
@@ -363,7 +457,7 @@ class AuthApiTests {
 
     @Test
     void logoutInvalidatesSessionServerSide() throws Exception {
-        Browser browser = registered("moi@exemple.fr");
+        Browser browser = registered("moi");
         Cookie session = browser.cookie("SESSION");
 
         browser.perform(post("/api/auth/logout")).andExpect(status().isNoContent());
@@ -374,12 +468,12 @@ class AuthApiTests {
 
     @Test
     void loginAfterLogoutWorksWithoutFetchingCsrfAgain() throws Exception {
-        Browser browser = registered("moi@exemple.fr");
+        Browser browser = registered("moi");
 
         browser.perform(post("/api/auth/logout")).andExpect(status().isNoContent());
 
         browser.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
-                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                        .content(credentials("moi", PASSWORD)))
                 .andExpect(status().isOk());
         browser.perform(get("/api/me")).andExpect(status().isOk());
     }
@@ -390,13 +484,16 @@ class AuthApiTests {
         String email = "moi@" + label + "." + label + "." + label + "." + label + "." + "x".repeat(6);
         assertThat(email).hasSize(254);
 
-        Browser browser = registered(email);
+        Browser browser = new Browser(mvc).fetchCsrf();
+        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+                        .content(registration("moi", email, PASSWORD)))
+                .andExpect(status().isCreated());
         browser.perform(get("/api/me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email));
 
         new Browser(mvc).fetchCsrf()
-                .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials(email, PASSWORD)))
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials("moi", PASSWORD)))
                 .andExpect(status().isOk());
     }
 }

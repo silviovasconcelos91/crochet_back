@@ -48,10 +48,10 @@ public class AuthController {
     public ResponseEntity<AccountResponse> register(
             @Valid @RequestBody RegisterRequest body, HttpServletRequest request, HttpServletResponse response) {
         loginAttempts.acquireForIp(request.getRemoteAddr());
-        Account account = accountService.register(body.email(), body.password());
+        Account account = accountService.register(body.username(), body.email(), body.password());
         // the password was just hashed: checking it again through the AuthenticationManager would
         // only cost a second BCrypt round
-        AccountPrincipal principal = new AccountPrincipal(account.getId(), account.getEmail(), null);
+        AccountPrincipal principal = new AccountPrincipal(account.getId(), null);
         startSession(UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, principal.getAuthorities()), request, response);
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(account));
@@ -61,12 +61,12 @@ public class AuthController {
     public AccountResponse login(
             @Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
         loginAttempts.acquireForIp(request.getRemoteAddr());
-        // reserved before hashing, so a locked email costs no BCrypt work; unknown emails are counted
-        // too, so a lock reveals nothing about which accounts exist
+        // reserved before hashing, so a locked username costs no BCrypt work; unknown usernames are
+        // counted too, so a lock reveals nothing about which accounts exist
         Authentication authentication = loginAttempts.checkLogin(
-                body.email(), request.getRemoteAddr(), BadCredentialsException.class,
+                Usernames.key(body.username()), request.getRemoteAddr(), BadCredentialsException.class,
                 () -> authenticationManager.authenticate(
-                        UsernamePasswordAuthenticationToken.unauthenticated(body.email(), body.password())));
+                        UsernamePasswordAuthenticationToken.unauthenticated(body.username(), body.password())));
         startSession(authentication, request, response);
         return AccountResponse.from(accountService.get(((AccountPrincipal) authentication.getPrincipal()).id()));
     }

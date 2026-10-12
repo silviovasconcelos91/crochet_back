@@ -19,7 +19,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.MismatchedInputException;
-import vasconcelos.silvio.crochet_back.account.EmailAlreadyUsedException;
+import vasconcelos.silvio.crochet_back.account.AlreadyUsedException;
 import vasconcelos.silvio.crochet_back.account.TooManyAttemptsException;
 import vasconcelos.silvio.crochet_back.pattern.PatternNotFoundException;
 import vasconcelos.silvio.crochet_back.pattern.ProgressNotFoundException;
@@ -42,7 +42,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(BadCredentialsException.class)
     ProblemDetail handleBadCredentials() {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid username or password");
     }
 
     /** The account store failed while authenticating: a server fault, not bad credentials. */
@@ -74,9 +74,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage()));
     }
 
-    @ExceptionHandler(EmailAlreadyUsedException.class)
-    ProblemDetail handleEmailAlreadyUsed(EmailAlreadyUsedException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    @ExceptionHandler(AlreadyUsedException.class)
+    ProblemDetail handleAlreadyUsed(AlreadyUsedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setProperty("errors", ex.getFields().stream()
+                .map(field -> Map.of("field", field, "message", "is already used"))
+                .toList());
+        return problem;
     }
 
     @Override

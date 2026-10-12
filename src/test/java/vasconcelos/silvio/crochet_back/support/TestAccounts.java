@@ -7,6 +7,7 @@ import org.springframework.web.context.WebApplicationContext;
 import vasconcelos.silvio.crochet_back.account.Account;
 import vasconcelos.silvio.crochet_back.account.AccountPrincipal;
 import vasconcelos.silvio.crochet_back.account.AccountRepository;
+import vasconcelos.silvio.crochet_back.account.Usernames;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -21,9 +22,10 @@ public final class TestAccounts {
     }
 
     /** Inserts a real account row and returns the principal Spring Security builds for it. */
-    public static AccountPrincipal create(AccountRepository accounts, PasswordEncoder encoder, String email) {
-        Account account = accounts.save(new Account(email, encoder.encode(PASSWORD)));
-        return new AccountPrincipal(account.getId(), account.getEmail(), account.getPasswordHash());
+    public static AccountPrincipal create(AccountRepository accounts, PasswordEncoder encoder, String username) {
+        Account account = accounts.save(
+                new Account(username, Usernames.key(username) + "@exemple.fr", encoder.encode(PASSWORD)));
+        return new AccountPrincipal(account.getId(), account.getPasswordHash());
     }
 
     /** MockMvc whose every request is authenticated as {@code principal} and carries a valid CSRF token. */

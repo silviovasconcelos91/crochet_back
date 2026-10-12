@@ -40,7 +40,7 @@ import static vasconcelos.silvio.crochet_back.support.TestAccounts.PASSWORD;
 @ExtendWith(OutputCaptureExtension.class)
 class InfrastructureFailureApiTests {
 
-    static final String EMAIL = "moi@exemple.fr";
+    static final String USERNAME = "moi";
 
     @Autowired
     MockMvc mvc;
@@ -62,14 +62,19 @@ class InfrastructureFailureApiTests {
         TestDatabase.reset(jdbc);
     }
 
+    static String registration(String password) {
+        return """
+                { "username": "%s", "email": "moi@exemple.fr", "password": "%s" }""".formatted(USERNAME, password);
+    }
+
     static String credentials(String password) {
         return """
-                { "email": "%s", "password": "%s" }""".formatted(EMAIL, password);
+                { "username": "%s", "password": "%s" }""".formatted(USERNAME, password);
     }
 
     Browser registered() throws Exception {
         Browser browser = new Browser(mvc).fetchCsrf();
-        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(credentials(PASSWORD)))
+        browser.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(registration(PASSWORD)))
                 .andExpect(status().isCreated());
         return browser;
     }
