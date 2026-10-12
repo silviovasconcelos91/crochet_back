@@ -1,6 +1,7 @@
 package vasconcelos.silvio.crochet_back.config;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.server.autoconfigure.ServerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,8 +24,10 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.servlet.HandlerExceptionResolver;
+import vasconcelos.silvio.crochet_back.account.LoginLimitProperties;
 
 @Configuration
+@EnableConfigurationProperties(LoginLimitProperties.class)
 public class SecurityConfig {
 
     /**

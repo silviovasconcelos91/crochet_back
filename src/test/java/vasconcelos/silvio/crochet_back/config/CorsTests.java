@@ -32,10 +32,11 @@ class CorsTests {
     }
 
     @Test
-    void locationHeaderIsExposedToConfiguredOrigin() throws Exception {
+    void locationAndRetryAfterHeadersAreExposedToConfiguredOrigin() throws Exception {
         mvc.perform(get("/api/auth/csrf").header("Origin", "http://localhost:5173"))
                 .andExpect(status().isNoContent())
                 .andExpect(header().string("Access-Control-Expose-Headers", containsString("Location")))
+                .andExpect(header().string("Access-Control-Expose-Headers", containsString("Retry-After")))
                 .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 

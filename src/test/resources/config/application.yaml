@@ -1,0 +1,7 @@
+# Loaded on top of the main application.yaml. Every MockMvc request comes from 127.0.0.1 and the
+# login counters live as long as the cached Spring context, so the suite would trip the production
+# limits; LoginRateLimitApiTests sets its own low limits.
+crochet:
+  login-limit:
+    max-failures-per-email: 1000
+    max-requests-per-ip: 100000
