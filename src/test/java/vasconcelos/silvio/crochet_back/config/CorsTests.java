@@ -33,9 +33,22 @@ class CorsTests {
 
     @Test
     void locationHeaderIsExposedToConfiguredOrigin() throws Exception {
-        mvc.perform(get("/api/patterns").header("Origin", "http://localhost:5173"))
+        mvc.perform(get("/api/auth/csrf").header("Origin", "http://localhost:5173"))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string("Access-Control-Expose-Headers", containsString("Location")))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+    }
+
+    @Test
+    void preflightWithCsrfHeaderAllowsCredentials() throws Exception {
+        mvc.perform(options("/api/patterns/1")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "PUT")
+                        .header("Access-Control-Request-Headers", "content-type,x-xsrf-token"))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Access-Control-Expose-Headers", containsString("Location")));
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+                .andExpect(header().string("Access-Control-Allow-Headers", containsString("x-xsrf-token")));
     }
 
     @Test

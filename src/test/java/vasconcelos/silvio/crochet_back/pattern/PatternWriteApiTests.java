@@ -5,10 +5,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.context.WebApplicationContext;
+import vasconcelos.silvio.crochet_back.account.AccountRepository;
+import vasconcelos.silvio.crochet_back.support.TestAccounts;
+import vasconcelos.silvio.crochet_back.support.TestDatabase;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 
 import java.time.Instant;
@@ -27,7 +31,6 @@ import static vasconcelos.silvio.crochet_back.pattern.PatternJson.create;
 import static vasconcelos.silvio.crochet_back.pattern.PatternJson.withSteps;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class PatternWriteApiTests {
 
@@ -42,14 +45,23 @@ class PatternWriteApiTests {
               { "title": "S3", "rows": [ { "number": "1", "value": "c" } ] } ]""");
 
     @Autowired
-    MockMvc mvc;
+    WebApplicationContext context;
+
+    @Autowired
+    AccountRepository accounts;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
 
     @Autowired
     JdbcTemplate jdbc;
 
+    MockMvc mvc;
+
     @BeforeEach
-    void cleanDatabase() {
-        jdbc.execute("TRUNCATE pattern RESTART IDENTITY CASCADE");
+    void setUp() {
+        TestDatabase.reset(jdbc);
+        mvc = TestAccounts.mockMvcAs(context, TestAccounts.create(accounts, passwordEncoder, "moi@exemple.fr"));
     }
 
     @Test
