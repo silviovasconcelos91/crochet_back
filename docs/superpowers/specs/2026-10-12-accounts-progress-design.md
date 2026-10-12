@@ -32,7 +32,10 @@ brute force accepté en local, à traiter avant toute mise en ligne).
 
 ## 2. Modèle de données
 
-### Migration V2
+### Migrations V2 à V5
+
+Découpées pour que chaque étape d'implémentation garde une suite verte : V2 `account`, V3 tables
+Spring Session, V4 `pattern.owner_id`, V5 `pattern_progress`.
 
 ```
 account
@@ -56,10 +59,10 @@ pattern_progress
   CHECK ((status = 'FINISHED') = (finished_at IS NOT NULL))
 ```
 
-La migration V2 **supprime les patterns existants** (données de dev sans propriétaire) avant
-d'ajouter `owner_id NOT NULL`.
+La migration V4 **supprime les patterns existants** (données de dev sans propriétaire) avant
+d'ajouter `owner_id NOT NULL`. `account` porte aussi `CHECK (email = lower(email))`.
 
-### Migration V3
+### Sessions (V3)
 
 Tables Spring Session JDBC (`spring_session`, `spring_session_attributes`), reprises du script
 PostgreSQL officiel de Spring Session. `spring.session.jdbc.initialize-schema: never` : Flyway
