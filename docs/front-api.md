@@ -148,6 +148,7 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
 | `POST /api/auth/logout` | — | `204`. La session est fermée et un nouveau `XSRF-TOKEN` est déposé |
 
 - **Pseudo** : 3 à 30 caractères, lettres (accents acceptés), chiffres, `_`, `-`, `.` ; ni espace ni `@`. Unique sans tenir compte de la casse ; la casse saisie est affichée. Connexion sans tenir compte de la casse. **L'email ne permet pas de se connecter.**
+- **Pseudo invalide** : `400` avec `errors: [{ "field": "username", "message": "must be 3 to 30 letters, digits, '_', '-' or '.'" }]`.
 - **409** : `errors: [{ "field": "username" | "email", "message": "is already used" }]`, les deux si les deux sont pris.
 - **Email** : il est normalisé côté serveur (espaces retirés, minuscules) et doit être valide, avec au plus 254 caractères.
 - **Mot de passe à l'inscription** : au moins 8 caractères et au plus 72 octets UTF-8, soit environ 72 caractères ASCII ou moins avec des accents.
@@ -162,11 +163,11 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
 | Méthode et route | Corps | Réponse |
 |---|---|---|
 | `GET /api/me` | — | `200` + `Account`, ou `401` |
-| `PUT /api/me/username` | `{ "username" }` | `200` + `Account`. Erreurs : `400`, `409`. La session reste ouverte |
+| `PUT /api/me/username` | `{ "username", "currentPassword" }` | `200` + `Account`. Erreurs : `400` (champs, ou mot de passe actuel incorrect), `409` (pseudo pris), `429` (limité comme le changement de mot de passe). La session reste ouverte |
 | `PUT /api/me/password` | `{ "currentPassword", "newPassword" }` | `204`. Les **autres** sessions du compte sont fermées, la session courante reste ouverte |
 | `DELETE /api/me` | `{ "password" }` (oui, un corps sur un DELETE) | `204`. Le compte et **tous** ses patterns sont supprimés, et toutes les sessions sont fermées |
 
-- **Erreurs sur le mot de passe** : un mot de passe actuel incorrect donne une `400` avec `errors: [{ "field": "currentPassword", "message": "is incorrect" }]`. Pour la suppression, le champ est `"password"`.
+- **Erreurs sur le mot de passe** : un mot de passe actuel incorrect donne une `400` avec `errors: [{ "field": "currentPassword", "message": "is incorrect" }]`. Même chose pour le changement de pseudo (champ `currentPassword`). Pour la suppression, le champ est `"password"`.
 - **Nouveau mot de passe** : mêmes règles qu'à l'inscription.
 - **Limite** : ces deux actions sont limitées comme le login, avec une `429` possible.
 
@@ -174,8 +175,8 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
 
 | Méthode et route | Corps | Réponse |
 |---|---|---|
-| `GET /api/patterns` | — | `200` + `PatternSummary[]` : **mes** patterns, publics et privés, triés par titre |
-| `GET /api/patterns/public` | — | `200` + `PatternSummary[]` : **tous** les patterns publics (les miens compris), triés par titre, avec mon avancement |
+| `GET /api/patterns` | — | `200` + `PatternSummary[]` : **mes** patterns, publics et privés, triés par titre, sans tenir compte de la casse |
+| `GET /api/patterns/public` | — | `200` + `PatternSummary[]` : **tous** les patterns publics (les miens compris), triés par titre, sans tenir compte de la casse, avec mon avancement |
 | `GET /api/patterns/{id}` | — | `200` + `Pattern` si j'en suis l'auteur ou s'il est public, sinon `404` |
 | `POST /api/patterns` | `PatternInput` | `201` + `Pattern`. L'en-tête `Location` pointe vers `/api/patterns/{id}` |
 | `PUT /api/patterns/{id}` | `PatternInput` | `200` + `Pattern`. `403` sur le pattern public d'un autre, `404` sur un pattern invisible |
@@ -242,4 +243,7 @@ await api('/api/auth/csrf');
 - détail d'un pattern, avec les étapes, les rangs et la position courante mise en évidence ;
 - boutons démarrer, rang suivant ou précédent, terminer, rouvrir et abandonner ;
 - création et édition d'un pattern (formulaire avec étapes et rangs dynamiques) ;
-- compte : changer le mot de passe, supprimer le compte.
+- catalogue public : tous les patterns publics, avec leur auteur ;
+- choix de la visibilité (privé ou public) dans le formulaire d'un pattern ;
+- détail d'un pattern : afficher l'auteur, et masquer les boutons modifier et supprimer quand `mine` vaut `false` ;
+- compte : changer le pseudo (avec le mot de passe actuel), changer le mot de passe, supprimer le compte.

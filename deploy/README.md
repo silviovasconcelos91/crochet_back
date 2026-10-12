@@ -67,3 +67,12 @@ sur un schéma plus récent, mais la validation Hibernate (`ddl-auto: validate`)
 version échouent si une table ou une colonne qu'ils utilisent a disparu ou changé. Chaque migration
 doit donc rester compatible avec la version précédente (ajouter avant de supprimer, en deux
 déploiements), pour que le retour arrière reste possible.
+
+**Exception : la version qui introduit les pseudos (migrations V7 et V9) est à sens unique.** V7 vide les
+comptes, les patterns et les sessions de façon irréversible, puis ajoute un pseudo obligatoire ; V9 change
+la clé de l'avancement. Il ne faut donc pas revenir à une image antérieure à cette version. Avant de la
+déployer, faire une sauvegarde de la base. Elle n'est pas dans `compose.yaml` : Postgres tourne sur le VPS
+(voir `DB_URL`), donc :
+
+    pg_dump -h localhost -U crochet -Fc crochet > crochet-avant-v7.dump
+
