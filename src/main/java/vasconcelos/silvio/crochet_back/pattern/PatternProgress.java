@@ -4,23 +4,27 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.MapsId;
-import jakarta.persistence.OneToOne;
+import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import vasconcelos.silvio.crochet_back.Timestamps;
 
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.List;
 
-/** Current step and row of a started pattern; positions are 0-based like Step/PatternRow positions. */
+/**
+ * One account's current step and row on one pattern; positions are 0-based like Step/PatternRow
+ * positions. Not part of the Pattern aggregate: several accounts follow one public pattern.
+ */
 @Entity
 @Table(name = "pattern_progress")
+@IdClass(PatternProgress.Key.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PatternProgress {
@@ -29,10 +33,9 @@ public class PatternProgress {
     @Column(name = "pattern_id")
     private Long patternId;
 
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "pattern_id")
-    private Pattern pattern;
+    @Id
+    @Column(name = "account_id")
+    private Long accountId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -53,8 +56,9 @@ public class PatternProgress {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
-    PatternProgress(Pattern pattern) {
-        this.pattern = pattern;
+    PatternProgress(Long patternId, Long accountId) {
+        this.patternId = patternId;
+        this.accountId = accountId;
         this.startedAt = Timestamps.now();
     }
 
@@ -78,5 +82,13 @@ public class PatternProgress {
     void clampTo(List<Step> steps) {
         stepPosition = Math.min(stepPosition, steps.size() - 1);
         rowPosition = Math.min(rowPosition, steps.get(stepPosition).getRows().size() - 1);
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Key implements Serializable {
+        private Long patternId;
+        private Long accountId;
     }
 }

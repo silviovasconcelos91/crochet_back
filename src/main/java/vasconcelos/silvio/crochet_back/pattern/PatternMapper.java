@@ -63,7 +63,8 @@ public class PatternMapper {
         return steps;
     }
 
-    public PatternResponse toResponse(Pattern pattern) {
+    /** {@code progress} is the logged-in account's, {@code null} when it has not started. */
+    public PatternResponse toResponse(Pattern pattern, PatternProgress progress) {
         List<StepResponse> steps = pattern.getSteps().stream()
                 .map(step -> new StepResponse(step.getTitle(), step.getRows().stream()
                         .map(row -> new RowResponse(row.getNumber(), row.getValue()))
@@ -80,7 +81,7 @@ public class PatternMapper {
                 pattern.getCreatedAt(),
                 pattern.getUpdatedAt(),
                 steps,
-                toProgressResponse(pattern.getProgress()),
+                toProgressResponse(progress),
                 pattern.getVisibility());
     }
 

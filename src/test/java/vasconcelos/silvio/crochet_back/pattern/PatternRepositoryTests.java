@@ -1,9 +1,6 @@
 package vasconcelos.silvio.crochet_back.pattern;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +9,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
+import vasconcelos.silvio.crochet_back.Timestamps;
 import vasconcelos.silvio.crochet_back.account.Account;
 import vasconcelos.silvio.crochet_back.account.AccountRepository;
 import vasconcelos.silvio.crochet_back.support.TestDatabase;
@@ -33,9 +31,6 @@ class PatternRepositoryTests {
 
     @Autowired
     EntityManager em;
-
-    @Autowired
-    EntityManagerFactory emf;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -111,22 +106,36 @@ class PatternRepositoryTests {
         repository.save(theirs);
 
         assertThat(repository.findAllSummaries(ownerId)).extracting(PatternSummaryRow::title).containsExactly("Mien");
-        assertThat(repository.findByIdAndOwnerId(mine.getId(), ownerId)).isPresent();
-        assertThat(repository.findByIdAndOwnerId(theirs.getId(), ownerId)).isEmpty();
+        assertThat(repository.findReadable(mine.getId(), ownerId)).isPresent();
+        assertThat(repository.findReadable(theirs.getId(), ownerId)).isEmpty();
+    }
+
+    @Autowired
+    PatternProgressRepository progress;
+
+    @Test
+    void summariesCarryOnlyTheGivenAccountsProgress() {
+        Long otherAccount = accounts.save(new Account("autre", "autre@exemple.fr", "hash")).getId();
+        Long id = repository.save(pattern("Chat", 2)).getId();
+        progress.insertIfMissing(id, otherAccount, Timestamps.now());
+        em.flush();
+
+        assertThat(repository.findAllSummaries(ownerId)).singleElement()
+                .satisfies(row -> assertThat(row.status()).isNull());
+
+        progress.insertIfMissing(id, ownerId, Timestamps.now());
+        em.flush();
+        assertThat(repository.findAllSummaries(ownerId)).singleElement()
+                .satisfies(row -> assertThat(row.status()).isEqualTo(ProgressStatus.IN_PROGRESS));
     }
 
     @Test
-    void findByIdAndOwnerIdLoadsTheProgressInTheSameQuery() {
-        Long id = repository.save(pattern("Chat", 1)).getId();
+    void insertIfMissingKeepsAnExistingRow() {
+        Long id = repository.save(pattern("Chat", 2)).getId();
         em.flush();
-        em.clear();
-        Statistics statistics = emf.unwrap(SessionFactory.class).getStatistics();
-        statistics.clear();
 
-        Pattern loaded = repository.findByIdAndOwnerId(id, ownerId).orElseThrow();
-
-        assertThat(loaded.getProgress()).isNull();
-        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+        assertThat(progress.insertIfMissing(id, ownerId, Timestamps.now())).isEqualTo(1);
+        assertThat(progress.insertIfMissing(id, ownerId, Timestamps.now())).isZero();
     }
 
     private Pattern pattern(String title, int stepCount) {

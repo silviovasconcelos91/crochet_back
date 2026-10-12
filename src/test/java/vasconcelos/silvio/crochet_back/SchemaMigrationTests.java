@@ -21,6 +21,17 @@ class SchemaMigrationTests {
     JdbcTemplate jdbc;
 
     @Test
+    void progressIsKeyedByPatternAndAccount() {
+        List<String> key = jdbc.queryForList("""
+                select a.attname from pg_index i
+                join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+                where i.indrelid = 'pattern_progress'::regclass and i.indisprimary
+                order by a.attname
+                """, String.class);
+        assertThat(key).containsExactly("account_id", "pattern_id");
+    }
+
+    @Test
     void flywayCreatesPatternTables() {
         List<String> tables = jdbc.queryForList("""
                 select table_name from information_schema.tables

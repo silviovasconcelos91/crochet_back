@@ -52,7 +52,7 @@ class PatternMapperTest {
 
     @Test
     void toResponseKeepsStepAndRowOrder() {
-        PatternResponse response = mapper.toResponse(mapper.toEntity(request));
+        PatternResponse response = mapper.toResponse(mapper.toEntity(request), null);
 
         assertThat(response.title()).isEqualTo("Chat");
         assertThat(response.hookSizeMm()).isEqualByComparingTo("3.5");
@@ -90,17 +90,16 @@ class PatternMapperTest {
     }
 
     @Test
-    void toResponseHasNoProgressUntilStartedThenMapsIt() {
-        Pattern pattern = mapper.toEntity(request);
-        assertThat(mapper.toResponse(pattern).progress()).isNull();
+    void toProgressResponseMapsPositionsAndNull() {
+        assertThat(mapper.toProgressResponse(null)).isNull();
 
-        pattern.updateProgress(ProgressStatus.IN_PROGRESS, 1, 0);
+        PatternProgress progress = new PatternProgress(1L, 2L);
+        progress.update(ProgressStatus.IN_PROGRESS, 1, 0);
 
-        ProgressResponse progress = mapper.toResponse(pattern).progress();
-        assertThat(progress.status()).isEqualTo(ProgressStatus.IN_PROGRESS);
-        assertThat(progress.stepIndex()).isEqualTo(1);
-        assertThat(progress.rowIndex()).isZero();
-        assertThat(progress.startedAt()).isNotNull();
-        assertThat(progress.finishedAt()).isNull();
+        ProgressResponse response = mapper.toProgressResponse(progress);
+        assertThat(response.status()).isEqualTo(ProgressStatus.IN_PROGRESS);
+        assertThat(response.stepIndex()).isEqualTo(1);
+        assertThat(response.rowIndex()).isZero();
+        assertThat(response.finishedAt()).isNull();
     }
 }
