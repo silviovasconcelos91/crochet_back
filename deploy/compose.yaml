@@ -1,0 +1,30 @@
+# Production stack, copied to /opt/crochet-back by the pipeline and started by deploy.sh.
+services:
+  app:
+    image: ${DOCKERHUB_IMAGE:?set in release.env}:${IMAGE_TAG:?set in release.env}
+    restart: unless-stopped
+    env_file: .env
+    # lets DB_URL reach a Postgres running on the VPS itself as host.docker.internal
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    # no published port: only Caddy reaches the app, so forwarded headers cannot be spoofed
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
