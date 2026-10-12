@@ -17,6 +17,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -69,13 +70,18 @@ public class Pattern {
 
     /** Marks the pattern as modified; call on every replace, even when only steps/rows changed. */
     public void touch() {
-        updatedAt = Instant.now();
+        updatedAt = now();
     }
 
     @PrePersist
     void onCreate() {
-        Instant now = Instant.now();
+        Instant now = now();
         createdAt = now;
         updatedAt = now;
+    }
+
+    /** Microsecond precision, as stored by timestamptz, so write responses match later reads. */
+    private static Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 }

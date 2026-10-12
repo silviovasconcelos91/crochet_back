@@ -1,5 +1,6 @@
 package vasconcelos.silvio.crochet_back.pattern;
 
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -11,10 +12,13 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import vasconcelos.silvio.crochet_back.TestcontainersConfiguration;
 
+import java.time.Instant;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.matchesPattern;
@@ -59,6 +63,19 @@ class PatternApiTests {
                 .andExpect(jsonPath("$.createdAt").value(notNullValue()))
                 .andExpect(jsonPath("$.updatedAt").value(notNullValue()))
                 .andExpect(jsonPath("$.steps.length()").value(2));
+    }
+
+    @Test
+    void createResponseTimestampsEqualThoseReadBack() throws Exception {
+        MvcResult created = mvc.perform(post("/api/patterns").contentType(APPLICATION_JSON).content(CHAT))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String posted = created.getResponse().getContentAsString();
+        String read = mvc.perform(get(created.getResponse().getHeader("Location")))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(instant(posted, "$.createdAt")).isEqualTo(instant(read, "$.createdAt"));
+        assertThat(instant(posted, "$.updatedAt")).isEqualTo(instant(read, "$.updatedAt"));
     }
 
     @Test
@@ -205,5 +222,9 @@ class PatternApiTests {
                 .andExpect(jsonPath("$.title").value("Tête de chat à crocheter"))
                 .andExpect(jsonPath("$.steps[0].title").value("Étape maille serrée"))
                 .andExpect(jsonPath("$.steps[0].rows[0].value").value(longValue));
+    }
+
+    private static Instant instant(String json, String path) {
+        return Instant.parse(JsonPath.read(json, path));
     }
 }

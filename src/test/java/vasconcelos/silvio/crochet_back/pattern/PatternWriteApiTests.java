@@ -106,6 +106,18 @@ class PatternWriteApiTests {
     }
 
     @Test
+    void putResponseUpdatedAtEqualsValueReadBack() throws Exception {
+        String location = create(mvc, CHAT);
+
+        String putBody = mvc.perform(put(location).contentType(APPLICATION_JSON).content(ONE_STEP))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String read = mvc.perform(get(location)).andReturn().getResponse().getContentAsString();
+
+        assertThat(instant(putBody, "$.updatedAt")).isEqualTo(instant(read, "$.updatedAt"));
+    }
+
+    @Test
     void invalidPutLeavesPatternUnchanged() throws Exception {
         String location = create(mvc, CHAT);
 
