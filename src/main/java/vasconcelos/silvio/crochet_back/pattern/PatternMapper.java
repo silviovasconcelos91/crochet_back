@@ -3,6 +3,7 @@ package vasconcelos.silvio.crochet_back.pattern;
 import org.springframework.stereotype.Component;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.PatternResponse;
+import vasconcelos.silvio.crochet_back.pattern.dto.ProgressResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.RowRequest;
 import vasconcelos.silvio.crochet_back.pattern.dto.RowResponse;
 import vasconcelos.silvio.crochet_back.pattern.dto.StepRequest;
@@ -13,6 +14,20 @@ import java.util.List;
 
 @Component
 public class PatternMapper {
+
+    /** {@code null} when the pattern is not started. */
+    public ProgressResponse toProgressResponse(PatternProgress progress) {
+        if (progress == null) {
+            return null;
+        }
+        return new ProgressResponse(
+                progress.getStatus(),
+                progress.getStepPosition(),
+                progress.getRowPosition(),
+                progress.getStartedAt(),
+                progress.getUpdatedAt(),
+                progress.getFinishedAt());
+    }
 
     public Pattern toEntity(PatternRequest request) {
         Pattern pattern = new Pattern();

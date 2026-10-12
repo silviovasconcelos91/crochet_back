@@ -5,8 +5,10 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -66,9 +68,27 @@ public class Pattern {
     @Setter(AccessLevel.NONE)
     private List<Step> steps = new ArrayList<>();
 
+    @OneToOne(mappedBy = "pattern", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Setter(AccessLevel.NONE)
+    private PatternProgress progress;
+
     public void addStep(Step step) {
         step.setPattern(this);
         steps.add(step);
+    }
+
+    /** Starts the pattern if needed, then moves its progress. Bounds are checked by the caller. */
+    public PatternProgress updateProgress(ProgressStatus status, int stepPosition, int rowPosition) {
+        if (progress == null) {
+            progress = new PatternProgress(this);
+        }
+        progress.update(status, stepPosition, rowPosition);
+        return progress;
+    }
+
+    /** Abandons the pattern: its progress row is deleted (orphan removal). */
+    public void clearProgress() {
+        progress = null;
     }
 
     /** Marks the pattern as modified; call on every replace, even when only steps/rows changed. */

@@ -15,6 +15,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import vasconcelos.silvio.crochet_back.account.EmailAlreadyUsedException;
 import vasconcelos.silvio.crochet_back.pattern.PatternNotFoundException;
+import vasconcelos.silvio.crochet_back.pattern.ProgressNotFoundException;
 
 import java.util.List;
 import java.util.Map;
@@ -54,13 +55,27 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         List<Map<String, String>> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> Map.of(
                         "field", error.getField(),
                         "message", String.valueOf(error.getDefaultMessage())))
                 .toList();
+        return handleExceptionInternal(ex, validationProblem(errors), headers, status, request);
+    }
+
+    @ExceptionHandler(ProgressNotFoundException.class)
+    ProblemDetail handleProgressNotFound(ProgressNotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidFieldException.class)
+    ProblemDetail handleInvalidField(InvalidFieldException ex) {
+        return validationProblem(List.of(Map.of("field", ex.getField(), "message", ex.getMessage())));
+    }
+
+    private static ProblemDetail validationProblem(List<Map<String, String>> errors) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         problem.setProperty("errors", errors);
-        return handleExceptionInternal(ex, problem, headers, status, request);
+        return problem;
     }
 }
