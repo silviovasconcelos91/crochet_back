@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: crochet
+      POSTGRES_USER: crochet
+      POSTGRES_PASSWORD: crochet
+    ports:
+      - "5432:5432"
+    volumes:
+      - crochet-data:/var/lib/postgresql/data
+
+volumes:
+  crochet-data:
