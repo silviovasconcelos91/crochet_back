@@ -15,6 +15,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -30,10 +34,12 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             SecurityContextRepository securityContextRepository,
+            CsrfTokenRepository csrfTokenRepository,
+            LogoutSuccessHandler logoutSuccessHandler,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
         http
                 .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.spa())
+                .csrf(csrf -> csrf.spa().csrfTokenRepository(csrfTokenRepository))
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/error").permitAll()
@@ -45,13 +51,32 @@ public class SecurityConfig {
                 .requestCache(cache -> cache.disable())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
-                        .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
+                        .logoutSuccessHandler(logoutSuccessHandler))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, ex) ->
                                 exceptionResolver.resolveException(request, response, null, ex))
                         .accessDeniedHandler((request, response, ex) ->
                                 exceptionResolver.resolveException(request, response, null, ex)));
         return http.build();
+    }
+
+    @Bean
+    CsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+    }
+
+    /**
+     * Logout clears the XSRF-TOKEN cookie (CsrfLogoutHandler); issue a fresh one in the same
+     * response so the SPA can log in again without calling GET /api/auth/csrf.
+     */
+    @Bean
+    LogoutSuccessHandler logoutSuccessHandler(CsrfTokenRepository csrfTokenRepository) {
+        LogoutSuccessHandler noContent = new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT);
+        return (request, response, authentication) -> {
+            CsrfToken token = csrfTokenRepository.generateToken(request);
+            csrfTokenRepository.saveToken(token, request, response);
+            noContent.onLogoutSuccess(request, response, authentication);
+        };
     }
 
     @Bean

@@ -251,4 +251,32 @@ class AuthApiTests {
         mvc.perform(get("/api/me").cookie(session)).andExpect(status().isUnauthorized());
         assertThat(jdbc.queryForObject("select count(*) from spring_session", Integer.class)).isZero();
     }
+
+    @Test
+    void loginAfterLogoutWorksWithoutFetchingCsrfAgain() throws Exception {
+        Browser browser = registered("moi@exemple.fr");
+
+        browser.perform(post("/api/auth/logout")).andExpect(status().isNoContent());
+
+        browser.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+                        .content(credentials("moi@exemple.fr", PASSWORD)))
+                .andExpect(status().isOk());
+        browser.perform(get("/api/me")).andExpect(status().isOk());
+    }
+
+    @Test
+    void maximumLengthEmailCanRegisterAndLogIn() throws Exception {
+        String label = "a".repeat(60);
+        String email = "moi@" + label + "." + label + "." + label + "." + label + "." + "x".repeat(6);
+        assertThat(email).hasSize(254);
+
+        Browser browser = registered(email);
+        browser.perform(get("/api/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(email));
+
+        new Browser(mvc).fetchCsrf()
+                .perform(post("/api/auth/login").contentType(APPLICATION_JSON).content(credentials(email, PASSWORD)))
+                .andExpect(status().isOk());
+    }
 }
