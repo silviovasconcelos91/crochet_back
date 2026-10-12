@@ -4,14 +4,15 @@ Tu développes le front d'une application de suivi de patterns de crochet. Le ba
 
 ## 1. Concepts métier
 
-- **Compte** : un utilisateur s'inscrit avec un email et un mot de passe. Chaque compte ne voit et ne modifie **que ses propres patterns**.
+- **Compte** : un utilisateur s'inscrit avec un **pseudo**, un email et un mot de passe, et se connecte avec son **pseudo**. Il voit et modifie ses patterns ; il peut aussi consulter les patterns **publics** des autres.
 - **Pattern** : un modèle de crochet. Il a un titre, des infos facultatives (description, taille de crochet en mm, laine, URL source, URL d'image) et **1 à n étapes**.
+- **Visibilité** : `PRIVATE` (moi seul) ou `PUBLIC` (tous les comptes connectés, en lecture). Seul l'auteur modifie ou supprime. Repasser en privé coupe l'accès des autres et **supprime leur avancement**.
 - **Étape (step)** : un titre et **1 à n rangs**, dans l'ordre.
 - **Rang (row)** : deux textes libres.
   - `number` : le libellé du rang, par exemple `"1"`, `"2"` ou `"3-5"`.
   - `value` : les instructions, par exemple `"3ms, [1ms, 4aug]x6 (34)"`.
   - Le backend n'interprète **pas** ces textes.
-- **Avancement (progress)** : où l'utilisateur en est sur un pattern, soit l'**étape courante** et le **rang courant**, pas la maille.
+- **Avancement (progress)** : propre à chaque compte : deux comptes avancent sur le même pattern public sans se voir ni se gêner. Il indique où l'utilisateur en est sur un pattern, soit l'**étape courante** et le **rang courant**, pas la maille.
   - Pattern non commencé : `progress` vaut `null`.
   - Statuts : `IN_PROGRESS` (en cours) ou `FINISHED` (terminé).
   - On peut démarrer, avancer, terminer, rouvrir un pattern terminé, ou **abandonner**. L'abandon supprime l'avancement, et le pattern redevient non commencé.
@@ -52,10 +53,10 @@ Les erreurs sont au format **Problem Details (RFC 9457)**, avec le content-type 
   ```
   Le chemin d'un champ imbriqué s'écrit comme `steps[0].rows[1].value`. Un mauvais type ou une valeur d'enum inconnue donne aussi une entrée `errors`, par exemple `{ "field": "status", "message": "must be one of [IN_PROGRESS, FINISHED]" }`.
 - **400 sans `errors`** : le JSON est illisible (syntaxe invalide).
-- **401** : `"Authentication required"` quand on n'est pas connecté, ou `"Invalid email or password"` quand le login échoue. Ce message est volontairement identique, que l'email existe ou non.
-- **403** : `"Access denied"`, quand le token CSRF est absent ou invalide.
-- **404** : `"Pattern 12 not found"`. Le pattern n'existe pas **ou appartient à un autre compte**, et les deux cas sont indiscernables. Pour un avancement absent : `"Pattern 12 is not started"`.
-- **409** : `"Email already used"`.
+- **401** : `"Authentication required"` quand on n'est pas connecté, ou `"Invalid username or password"` quand le login échoue. Ce message est volontairement identique, que le pseudo existe ou non.
+- **403** : `"Access denied"`, quand le token CSRF est absent ou invalide ; `"Pattern 12 belongs to another account"` pour une écriture sur le pattern public d'un autre.
+- **404** : `"Pattern 12 not found"`. Le pattern n'existe pas **ou est privé et appartient à un autre compte**, et les deux cas sont indiscernables. Pour un avancement absent : `"Pattern 12 is not started"`.
+- **409** : `"Already used"`, avec `errors` (champ `username` et/ou `email`).
 - **429** : `"Too many attempts, try again later"`, avec un en-tête **`Retry-After`** qui donne le délai en secondes, lisible depuis le front. Il faut afficher un message comme « Trop de tentatives, réessayez dans N minutes ».
 - **500** : `"Internal error"`, ou une réponse sans corps exploitable. Il faut afficher un message générique.
 
@@ -66,7 +67,11 @@ Les dates sont en ISO-8601 UTC, par exemple `"2026-10-12T14:41:16.773123Z"`. Un 
 ```ts
 type ProgressStatus = 'IN_PROGRESS' | 'FINISHED';
 
-interface Account { id: number; email: string; createdAt: string; }
+type Visibility = 'PRIVATE' | 'PUBLIC';
+
+interface Account { id: number; username: string; email: string; createdAt: string; }
+
+interface Author { username: string; }
 
 interface Row { number: string; value: string; }
 interface Step { title: string; rows: Row[]; }
@@ -92,6 +97,9 @@ interface Pattern {            // détail
   updatedAt: string;
   steps: Step[];
   progress: Progress | null;  // null = non commencé
+  visibility: Visibility;
+  author: Author;
+  mine: boolean;              // mine = je suis l'auteur, afficher l'édition
 }
 
 interface PatternSummary {     // élément de liste
@@ -103,6 +111,9 @@ interface PatternSummary {     // élément de liste
   imageUrl: string | null;
   stepCount: number;
   progress: Progress | null;
+  visibility: Visibility;
+  author: Author;
+  mine: boolean;              // mine = je suis l'auteur, afficher l'édition
 }
 
 interface PatternInput {       // corps de POST et de PUT /api/patterns
@@ -112,6 +123,7 @@ interface PatternInput {       // corps de POST et de PUT /api/patterns
   yarn?: string | null;        // ≤ 200
   sourceUrl?: string | null;   // ≤ 500
   imageUrl?: string | null;    // ≤ 500
+  visibility?: Visibility;     // omis = 'PRIVATE', y compris sur PUT
   steps: {                     // au moins 1 étape
     title: string;             // obligatoire, ≤ 200
     rows: {                    // au moins 1 rang
@@ -131,15 +143,17 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
 | Méthode et route | Corps | Réponse |
 |---|---|---|
 | `GET /api/auth/csrf` | — | `204`, dépose le cookie `XSRF-TOKEN` |
-| `POST /api/auth/register` | `{ "email", "password" }` | `201` + `Account`. L'utilisateur est **connecté** directement. Erreurs : `400` (champs), `409` (email pris), `429` |
-| `POST /api/auth/login` | `{ "email", "password" }` | `200` + `Account`. Erreurs : `400`, `401` (identifiants invalides), `429` |
+| `POST /api/auth/register` | `{ "username", "email", "password" }` | `201` + `Account`. L'utilisateur est **connecté** directement. Erreurs : `400` (champs), `409` (pseudo et/ou email pris), `429` |
+| `POST /api/auth/login` | `{ "username", "password" }` | `200` + `Account`. Erreurs : `400`, `401` (identifiants invalides), `429` |
 | `POST /api/auth/logout` | — | `204`. La session est fermée et un nouveau `XSRF-TOKEN` est déposé |
 
+- **Pseudo** : 3 à 30 caractères, lettres (accents acceptés), chiffres, `_`, `-`, `.` ; ni espace ni `@`. Unique sans tenir compte de la casse ; la casse saisie est affichée. Connexion sans tenir compte de la casse. **L'email ne permet pas de se connecter.**
+- **409** : `errors: [{ "field": "username" | "email", "message": "is already used" }]`, les deux si les deux sont pris.
 - **Email** : il est normalisé côté serveur (espaces retirés, minuscules) et doit être valide, avec au plus 254 caractères.
 - **Mot de passe à l'inscription** : au moins 8 caractères et au plus 72 octets UTF-8, soit environ 72 caractères ASCII ou moins avec des accents.
 - **Limite de tentatives** :
-  - 5 échecs de connexion en 15 minutes pour un même email depuis une même adresse bloquent cette adresse pour cet email ;
-  - 50 échecs au total sur un email le bloquent pour tout le monde ;
+  - 5 échecs de connexion en 15 minutes pour un même pseudo depuis une même adresse bloquent cette adresse pour ce pseudo ;
+  - 50 échecs au total sur un pseudo le bloquent pour tout le monde ;
   - une même adresse a droit à 20 requêtes login ou inscription par minute.
   - Chaque refus renvoie une `429` avec `Retry-After`.
 
@@ -148,6 +162,7 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
 | Méthode et route | Corps | Réponse |
 |---|---|---|
 | `GET /api/me` | — | `200` + `Account`, ou `401` |
+| `PUT /api/me/username` | `{ "username" }` | `200` + `Account`. Erreurs : `400`, `409`. La session reste ouverte |
 | `PUT /api/me/password` | `{ "currentPassword", "newPassword" }` | `204`. Les **autres** sessions du compte sont fermées, la session courante reste ouverte |
 | `DELETE /api/me` | `{ "password" }` (oui, un corps sur un DELETE) | `204`. Le compte et **tous** ses patterns sont supprimés, et toutes les sessions sont fermées |
 
@@ -155,21 +170,24 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
 - **Nouveau mot de passe** : mêmes règles qu'à l'inscription.
 - **Limite** : ces deux actions sont limitées comme le login, avec une `429` possible.
 
-### Patterns (connecté obligatoire ; seulement ceux du compte)
+### Patterns (connecté obligatoire)
 
 | Méthode et route | Corps | Réponse |
 |---|---|---|
-| `GET /api/patterns` | — | `200` + `PatternSummary[]`, triés par titre sans tenir compte de la casse |
-| `GET /api/patterns/{id}` | — | `200` + `Pattern`, ou `404` |
+| `GET /api/patterns` | — | `200` + `PatternSummary[]` : **mes** patterns, publics et privés, triés par titre |
+| `GET /api/patterns/public` | — | `200` + `PatternSummary[]` : **tous** les patterns publics (les miens compris), triés par titre, avec mon avancement |
+| `GET /api/patterns/{id}` | — | `200` + `Pattern` si j'en suis l'auteur ou s'il est public, sinon `404` |
 | `POST /api/patterns` | `PatternInput` | `201` + `Pattern`. L'en-tête `Location` pointe vers `/api/patterns/{id}` |
-| `PUT /api/patterns/{id}` | `PatternInput` | `200` + `Pattern`, ou `404` |
-| `DELETE /api/patterns/{id}` | — | `204`, ou `404`. L'avancement est supprimé avec |
+| `PUT /api/patterns/{id}` | `PatternInput` | `200` + `Pattern`. `403` sur le pattern public d'un autre, `404` sur un pattern invisible |
+| `DELETE /api/patterns/{id}` | — | `204`. `403` / `404` comme le `PUT`. L'avancement de tout le monde est supprimé avec |
 
 - **`PUT` remplace tout le pattern** :
   - Un champ facultatif omis devient `null`.
   - Les étapes et les rangs sont entièrement remplacés par ceux envoyés.
   - Pour éditer, renvoyer le pattern complet modifié.
-- **Effet sur l'avancement** : si le `PUT` supprime l'étape ou le rang où se trouvait l'utilisateur, l'avancement est **recadré** sur la dernière étape ou le dernier rang existant. Son statut et ses dates ne changent pas.
+- **Visibilité** : repasser en `PRIVATE` supprime l'avancement des autres comptes.
+- **Pas de pagination** du catalogue pour l'instant.
+- **Effet sur l'avancement** : si le `PUT` supprime l'étape ou le rang où se trouvait un utilisateur, l'avancement de **chaque** compte est **recadré** sur la dernière étape ou le dernier rang existant. Son statut et ses dates ne changent pas.
 
 ### Avancement d'un pattern
 
@@ -187,7 +205,8 @@ L'ordre des étapes et des rangs est celui des tableaux envoyés. Aucun champ de
   - Les trois champs sont obligatoires.
   - `stepIndex` doit être inférieur au nombre d'étapes, et `rowIndex` au nombre de rangs de cette étape. Sinon, la réponse est une `400` avec `errors: [{ "field": "rowIndex", "message": "must be less than 3" }]`.
 - **Exemple :** pour « passer au rang suivant », le front calcule la nouvelle position, y compris le passage à l'étape suivante, puis envoie la position complète.
-- **Où lire l'avancement :** il figure dans `progress` du détail (`GET /api/patterns/{id}`) et de chaque élément de la liste.
+- **Accès :** `PUT` et `DELETE …/progress` sont possibles sur mes patterns et sur tout pattern public ; `404` sinon.
+- **Où lire l'avancement :** `progress` (détail et listes) est toujours **celui du compte connecté**. Il figure dans `progress` du détail (`GET /api/patterns/{id}`) et de chaque élément de la liste.
 
 ## 6. Exemple de client
 
